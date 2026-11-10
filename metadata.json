@@ -1,0 +1,6 @@
+{
+  "name": "ASTROCARE — Astronaut Health Intelligence",
+  "description": "NASA Space Apps astronaut bio-telemetry, physiological adaptation tracking, and clinical crew dossier system.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

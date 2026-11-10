@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-display: 'Chakra Petch', sans-serif;
+
+  --color-space-950: #050810;
+  --color-space-900: #0a1128;
+  --color-space-850: #0f1838;
+  --color-space-800: #14224d;
+  --color-space-700: #1e3366;
+  
+  --color-cyan-glow: #00e5ff;
+  --color-amber-alert: #ff8c00;
+  --color-emerald-nominal: #10b981;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #050810;
+  color: #ffffff;
+  overflow-x: hidden;
+}
+
+/* Glassmorphism surfaces with enhanced neon cyan border & shadow */
+.glass-panel {
+  background: rgba(10, 17, 40, 0.78);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  box-shadow: 0 0 25px rgba(0, 229, 255, 0.18), 0 16px 45px rgba(0, 0, 0, 0.75);
+}
+
+.glass-panel-interactive {
+  background: rgba(10, 17, 40, 0.78);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(0, 229, 255, 0.32);
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.15), 0 10px 35px rgba(0, 0, 0, 0.7);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-panel-interactive:hover {
+  border-color: rgba(0, 229, 255, 0.75);
+  box-shadow: 0 0 35px rgba(0, 229, 255, 0.38), 0 16px 45px rgba(0, 0, 0, 0.85);
+  transform: translateY(-1px);
+}
+
+/* Sci-Fi Neon Glow Effects */
+.glow-cyan {
+  box-shadow: 0 0 18px rgba(0, 229, 255, 0.45);
+}
+
+.glow-orange {
+  box-shadow: 0 0 18px rgba(255, 140, 0, 0.45);
+}
+
+.glow-emerald {
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.45);
+}
+
+.glow-rose {
+  box-shadow: 0 0 18px rgba(244, 63, 94, 0.45);
+}
+
+.glow-text-cyan {
+  text-shadow: 0 0 14px rgba(0, 229, 255, 0.75), 0 0 28px rgba(0, 229, 255, 0.35);
+}
+
+.glow-text-orange {
+  text-shadow: 0 0 14px rgba(255, 140, 0, 0.75), 0 0 28px rgba(255, 140, 0, 0.35);
+}
+
+.glow-text-emerald {
+  text-shadow: 0 0 14px rgba(16, 185, 129, 0.75), 0 0 28px rgba(16, 185, 129, 0.35);
+}
+
+.glow-text-rose {
+  text-shadow: 0 0 14px rgba(244, 63, 94, 0.75), 0 0 28px rgba(244, 63, 94, 0.35);
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #050810;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e3366;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #00e5ff;
+  box-shadow: 0 0 10px #00e5ff;
+}
