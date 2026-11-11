@@ -29,7 +29,10 @@ export const SurgeonLinkCard: React.FC<SurgeonLinkCardProps> = ({
   };
 
   return (
-    <div className="glass-panel p-6 sm:p-7 rounded-2xl relative overflow-hidden border border-[#00E5FF]/30 shadow-[0_0_25px_rgba(0,229,255,0.15)]">
+    <div
+      className="glass-panel p-6 sm:p-7 rounded-2xl relative overflow-hidden border border-[#00E5FF]/30 shadow-[0_0_25px_rgba(0,229,255,0.15)] bg-[#0a1128]"
+      style={{ backgroundColor: '#0a1128' }}
+    >
       {/* Background ambient lighting */}
       <div className="absolute top-0 right-0 w-64 h-64 bg-[#00E5FF]/5 rounded-full blur-3xl pointer-events-none" />
 

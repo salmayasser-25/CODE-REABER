@@ -31,31 +31,46 @@ body {
 
 /* Glassmorphism surfaces with enhanced neon cyan border & shadow */
 .glass-panel {
-  background: rgba(10, 17, 40, 0.78);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(0, 229, 255, 0.35);
-  box-shadow: 0 0 25px rgba(0, 229, 255, 0.18), 0 16px 45px rgba(0, 0, 0, 0.75);
+  background: rgba(10, 17, 40, 0.82);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(0, 229, 255, 0.38);
+  box-shadow: 0 0 28px rgba(0, 229, 255, 0.22), 0 0 50px rgba(0, 229, 255, 0.08), 0 16px 45px rgba(0, 0, 0, 0.8);
+}
+
+.glass-panel-glow-cyan {
+  border-color: rgba(0, 229, 255, 0.45);
+  box-shadow: 0 0 30px rgba(0, 229, 255, 0.28), 0 0 60px rgba(0, 229, 255, 0.12), 0 16px 45px rgba(0, 0, 0, 0.8);
+}
+
+.glass-panel-glow-orange {
+  border-color: rgba(255, 140, 0, 0.45);
+  box-shadow: 0 0 30px rgba(255, 140, 0, 0.28), 0 0 60px rgba(255, 140, 0, 0.10), 0 16px 45px rgba(0, 0, 0, 0.8);
+}
+
+.glass-panel-glow-purple {
+  border-color: rgba(168, 85, 247, 0.45);
+  box-shadow: 0 0 32px rgba(168, 85, 247, 0.26), 0 0 65px rgba(139, 92, 246, 0.12), 0 16px 45px rgba(0, 0, 0, 0.8);
 }
 
 .glass-panel-interactive {
-  background: rgba(10, 17, 40, 0.78);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(0, 229, 255, 0.32);
-  box-shadow: 0 0 20px rgba(0, 229, 255, 0.15), 0 10px 35px rgba(0, 0, 0, 0.7);
+  background: rgba(10, 17, 40, 0.82);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  box-shadow: 0 0 24px rgba(0, 229, 255, 0.18), 0 10px 35px rgba(0, 0, 0, 0.7);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-panel-interactive:hover {
-  border-color: rgba(0, 229, 255, 0.75);
-  box-shadow: 0 0 35px rgba(0, 229, 255, 0.38), 0 16px 45px rgba(0, 0, 0, 0.85);
+  border-color: rgba(0, 229, 255, 0.85);
+  box-shadow: 0 0 40px rgba(0, 229, 255, 0.42), 0 0 70px rgba(0, 229, 255, 0.15), 0 16px 45px rgba(0, 0, 0, 0.9);
   transform: translateY(-1px);
 }
 
 /* Sci-Fi Neon Glow Effects */
 .glow-cyan {
-  box-shadow: 0 0 18px rgba(0, 229, 255, 0.45);
+  box-shadow: 0 0 22px rgba(0, 229, 255, 0.55);
 }
 
 .glow-orange {

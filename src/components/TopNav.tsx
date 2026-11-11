@@ -6,12 +6,16 @@ interface TopNavProps {
   isEditing?: boolean;
   onToggleEdit?: () => void;
   onOpenRoleModal?: () => void;
+  currentTab?: string;
+  onSelectTab?: (tab: string) => void;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
   isEditing = false,
   onToggleEdit,
   onOpenRoleModal,
+  currentTab = 'profile',
+  onSelectTab,
 }) => {
   const [missionTime, setMissionTime] = useState<string>('MET T+84:14:22:18');
 
@@ -67,18 +71,32 @@ export const TopNav: React.FC<TopNavProps> = ({
           </div>
         </div>
 
-        {/* Zone 2: Telemetry & Mission Clock Info */}
-        <div className="hidden lg:flex items-center gap-6 text-sm font-mono text-slate-200">
-          <div className="flex items-center gap-2">
-            <Radio className="w-4 h-4 text-[#00E5FF] animate-pulse" />
-            <span className="text-slate-300 uppercase tracking-wide">UPLINK:</span>
-            <span className="text-[#00E5FF] font-bold">TDRS-EAST // LOCKED (99.8%)</span>
-          </div>
-          <span className="text-slate-600" aria-hidden="true">|</span>
-          <div className="flex items-center gap-2">
-            <span className="text-slate-300 uppercase tracking-wide">MISSION CLOCK:</span>
-            <span className="text-white font-bold tabular-nums tracking-wide text-sm">{missionTime}</span>
-          </div>
+        {/* Zone 2: Navigation Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+          {[
+            { id: 'profile', label: 'Profile' },
+            { id: 'vitals', label: 'Vitals & AI' },
+            { id: 'checkin', label: 'Daily Check-in' },
+            { id: 'mental', label: 'Mental Wellness' },
+            { id: 'body3d', label: '3D Body Map' },
+            { id: 'timeline', label: 'Medical Timeline' },
+          ].map((tab) => {
+            const active = currentTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onSelectTab?.(tab.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all whitespace-nowrap cursor-pointer ${
+                  active
+                    ? 'bg-[#00E5FF] text-black shadow-[0_0_15px_#00E5FF]'
+                    : 'bg-slate-900/80 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-700/80'
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Zone 3: Actions & Role-Based Access Placeholder (Requirement 7) */}

@@ -9,6 +9,11 @@ import { SurgeonLinkCard } from './components/SurgeonLinkCard.js';
 import { EditProfileModal } from './components/EditProfileModal.js';
 import { ClinicalContextModal } from './components/ClinicalContextModal.js';
 import { RoleModal } from './components/RoleModal.js';
+import { VitalSignsPage } from './components/VitalSignsPage.tsx';
+import { MentalWellnessPage } from './components/MentalWellnessPage.tsx';
+import { InteractiveBodyPage } from './components/InteractiveBodyPage.tsx';
+import { DailyCheckinPage } from './components/DailyCheckinPage.tsx';
+import { UnifiedTimelinePage } from './components/UnifiedTimelinePage.tsx';
 import { AstronautProfile, FlightSurgeon } from './types/astronaut.js';
 import { 
   CheckCircle, 
@@ -55,6 +60,7 @@ const DEFAULT_INITIAL_PROFILE: AstronautProfile = {
 
 export default function App() {
   const [profile, setProfile] = useState<AstronautProfile>(DEFAULT_INITIAL_PROFILE);
+  const [currentTab, setCurrentTab] = useState<string>('profile');
   const [isEditingInline, setIsEditingInline] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isContextModalOpen, setIsContextModalOpen] = useState<boolean>(false);
@@ -209,10 +215,10 @@ export default function App() {
         backgroundColor: '#050810',
       }}
     >
-      {/* 45% Dark Overlay (rgba(5, 8, 16, 0.45)) to showcase the vibrant Earth and glowing Nebula */}
+      {/* Transparent Dark Overlay (rgba(5, 8, 16, 0.35)) to showcase the vibrant Earth and glowing Nebula */}
       <div
         className="fixed inset-0 pointer-events-none z-0 transition-opacity duration-300"
-        style={{ backgroundColor: 'rgba(5, 8, 16, 0.45)' }}
+        style={{ backgroundColor: 'rgba(5, 8, 16, 0.35)' }}
       />
 
       {/* Dynamic Animated Canvas Space Background with Stars & Shooting Stars */}
@@ -225,113 +231,155 @@ export default function App() {
           isEditing={isEditingInline}
           onToggleEdit={() => setIsEditingInline((prev) => !prev)}
           onOpenRoleModal={() => setIsRoleModalOpen(true)}
+          currentTab={currentTab}
+          onSelectTab={setCurrentTab}
         />
 
         {/* Content Layout: Left Sidebar + Main Content */}
         <div className="flex-1 flex flex-row">
           <Sidebar
-            currentTab="profile"
+            currentTab={currentTab}
+            onSelectTab={setCurrentTab}
             astronautName={profile.name}
             callsign={profile.callsign}
           />
 
           <main className="flex-1 px-4 sm:px-6 lg:px-8 py-7 max-w-7xl mx-auto w-full space-y-7">
-            {/* Inline Edit Mode Warning Strip */}
-            {isEditingInline && (
-              <div className="p-4 rounded-xl bg-[#FF8C00]/20 border border-[#FF8C00]/50 text-[#FFB347] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-[0_0_25px_rgba(255,140,0,0.3)] backdrop-blur-md">
-                <div className="flex items-center gap-3 text-sm font-mono">
-                  <Sliders className="w-5 h-5 text-[#FF8C00] shrink-0" />
-                  <span className="text-white">
-                    <strong className="text-[#FF8C00]">INLINE EDIT MODE ENGAGED:</strong> Adjust sliders, type new values, or add allergies directly.
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => handleSaveProfile()}
-                    disabled={isSaving}
-                    className="px-4 py-2 rounded-lg bg-[#FF8C00] text-black font-mono font-extrabold text-xs sm:text-sm hover:bg-[#FF8C00]/90 transition-colors shadow-md"
-                  >
-                    {isSaving ? 'SAVING...' : 'SAVE CHANGES'}
-                  </button>
-                  <button
-                    onClick={() => setIsEditingInline(false)}
-                    className="px-4 py-2 rounded-lg bg-slate-900 text-slate-200 font-mono text-xs sm:text-sm hover:bg-slate-800 transition-colors border border-slate-700"
-                  >
-                    CANCEL
-                  </button>
-                </div>
-              </div>
+            {/* View 1: Vital Signs & Gemini AI Clinical Insight */}
+            {currentTab === 'vitals' && (
+              <VitalSignsPage 
+                profile={profile} 
+                onNavigateToCheckin={() => setCurrentTab('checkin')} 
+              />
             )}
 
-            {/* Astronaut Header Section with High-Contrast Typography & Glow */}
-            <AstronautHeader
-              profile={profile}
-              isEditing={isEditingInline}
-              onToggleEdit={() => setIsEditingInline((prev) => !prev)}
-              onSave={() => handleSaveProfile()}
-              onReset={handleResetProfile}
-              onPhotoUpload={handlePhotoUpload}
-              isSaving={isSaving}
-            />
+            {/* View 2: Daily Health Check-in */}
+            {currentTab === 'checkin' && (
+              <DailyCheckinPage 
+                profile={profile} 
+                onNavigateToTimeline={() => setCurrentTab('timeline')} 
+              />
+            )}
 
-            {/* Sub-toolbar for quick modal launch and status metadata */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-2 text-xs sm:text-sm font-mono text-slate-200">
-              <div className="flex items-center gap-3">
-                <span className="text-[#00E5FF] font-bold">PAGE: ASTRONAUT PROFILE (PHASE 1)</span>
-                <span className="text-slate-500">·</span>
-                <span className="text-slate-200">TELEMETRY: 1-HZ REALTIME</span>
-                <span className="text-slate-500 hidden md:inline">·</span>
-                <span className="text-slate-300 hidden md:inline">LAST SYNC: {new Date(profile.updatedAt || Date.now()).toLocaleTimeString()}</span>
-              </div>
+            {/* View 3: Mental Wellness & 3D Avatar Companion */}
+            {currentTab === 'mental' && (
+              <MentalWellnessPage profile={profile} />
+            )}
 
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsContextModalOpen(true)}
-                  className="px-3.5 py-1.5 rounded-lg bg-[#00E5FF]/15 hover:bg-[#00E5FF]/25 border border-[#00E5FF]/45 text-[#00E5FF] flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(0,229,255,0.2)] text-xs font-bold"
-                >
-                  <BookOpen className="w-4 h-4 text-[#00E5FF]" />
-                  <span>Clinical Briefing</span>
-                </button>
+            {/* View 4: Interactive 3D Body Symptom Mapping */}
+            {(currentTab === 'body3d' || currentTab === 'symptoms') && (
+              <InteractiveBodyPage profile={profile} />
+            )}
 
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(true)}
-                  className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-[#00E5FF]/45 text-white flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(0,229,255,0.2)] text-xs font-bold"
-                >
-                  <Edit3 className="w-4 h-4 text-[#00E5FF]" />
-                  <span>Full Edit Dialog</span>
-                </button>
-              </div>
-            </div>
+            {/* View 5: Unified Medical & Telemetry Timeline */}
+            {currentTab === 'timeline' && (
+              <UnifiedTimelinePage 
+                profile={profile} 
+                onNavigateToTab={setCurrentTab} 
+              />
+            )}
 
-            {/* Section 1: Crew Dossier Card */}
-            <CrewDossierCard
-              profile={profile}
-              isEditing={isEditingInline}
-              onChange={handleFieldChange}
-            />
+            {/* View 6: Astronaut Profile Page (Only ONE Profile Route) */}
+            {currentTab === 'profile' && (
+              <>
+                {/* Inline Edit Mode Warning Strip */}
+                {isEditingInline && (
+                  <div className="p-4 rounded-xl bg-[#FF8C00]/20 border border-[#FF8C00]/50 text-[#FFB347] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-[0_0_25px_rgba(255,140,0,0.3)] backdrop-blur-md">
+                    <div className="flex items-center gap-3 text-sm font-mono">
+                      <Sliders className="w-5 h-5 text-[#FF8C00] shrink-0" />
+                      <span className="text-white">
+                        <strong className="text-[#FF8C00]">INLINE EDIT MODE ENGAGED:</strong> Adjust sliders, type new values, or add allergies directly.
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => handleSaveProfile()}
+                        disabled={isSaving}
+                        className="px-4 py-2 rounded-lg bg-[#FF8C00] text-black font-mono font-extrabold text-xs sm:text-sm hover:bg-[#FF8C00]/90 transition-colors shadow-md"
+                      >
+                        {isSaving ? 'SAVING...' : 'SAVE CHANGES'}
+                      </button>
+                      <button
+                        onClick={() => setIsEditingInline(false)}
+                        className="px-4 py-2 rounded-lg bg-slate-900 text-slate-200 font-mono text-xs sm:text-sm hover:bg-slate-800 transition-colors border border-slate-700"
+                      >
+                        CANCEL
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-            {/* Section 2: Clinical Conditions & Adaptations (Spine Elongation, Blood, Allergies) */}
-            <ClinicalAdaptationsCard
-              profile={profile}
-              isEditing={isEditingInline}
-              onSpineChange={(val) => handleFieldChange('spineElongation', val)}
-              onBloodTypeChange={(val) => handleFieldChange('bloodType', val)}
-              onAddAllergy={handleAddAllergy}
-              onRemoveAllergy={handleRemoveAllergy}
-              onAddCondition={handleAddCondition}
-              onRemoveCondition={handleRemoveCondition}
-              onOpenContextModal={() => setIsContextModalOpen(true)}
-            />
+                {/* Astronaut Header Section with High-Contrast Typography & Glow */}
+                <AstronautHeader
+                  profile={profile}
+                  isEditing={isEditingInline}
+                  onToggleEdit={() => setIsEditingInline((prev) => !prev)}
+                  onSave={() => handleSaveProfile()}
+                  onReset={handleResetProfile}
+                  onPhotoUpload={handlePhotoUpload}
+                  isSaving={isSaving}
+                />
 
-            {/* Section 3: Ground Flight Surgeon Link (with Send Bio-metric Ping action) */}
-            <SurgeonLinkCard
-              surgeon={profile.assignedSurgeon}
-              isEditing={isEditingInline}
-              onSurgeonChange={handleSurgeonChange}
-              onSendPingToast={(msg) => triggerToast(msg, 'success')}
-            />
+                {/* Sub-toolbar for quick modal launch and status metadata */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-2 text-xs sm:text-sm font-mono text-slate-200">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[#00E5FF] font-bold">PAGE: ASTRONAUT PROFILE (PHASE 1)</span>
+                    <span className="text-slate-500">·</span>
+                    <span className="text-slate-200">TELEMETRY: 1-HZ REALTIME</span>
+                    <span className="text-slate-500 hidden md:inline">·</span>
+                    <span className="text-slate-300 hidden md:inline">LAST SYNC: {new Date(profile.updatedAt || Date.now()).toLocaleTimeString()}</span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsContextModalOpen(true)}
+                      className="px-3.5 py-1.5 rounded-lg bg-[#00E5FF]/15 hover:bg-[#00E5FF]/25 border border-[#00E5FF]/45 text-[#00E5FF] flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(0,229,255,0.2)] text-xs font-bold"
+                    >
+                      <BookOpen className="w-4 h-4 text-[#00E5FF]" />
+                      <span>Clinical Briefing</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsModalOpen(true)}
+                      className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-[#00E5FF]/45 text-white flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(0,229,255,0.2)] text-xs font-bold"
+                    >
+                      <Edit3 className="w-4 h-4 text-[#00E5FF]" />
+                      <span>Full Edit Dialog</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Section 1: Crew Dossier Card */}
+                <CrewDossierCard
+                  profile={profile}
+                  isEditing={isEditingInline}
+                  onChange={handleFieldChange}
+                />
+
+                {/* Section 2: Clinical Conditions & Adaptations (Spine Elongation, Blood, Allergies) */}
+                <ClinicalAdaptationsCard
+                  profile={profile}
+                  isEditing={isEditingInline}
+                  onSpineChange={(val) => handleFieldChange('spineElongation', val)}
+                  onBloodTypeChange={(val) => handleFieldChange('bloodType', val)}
+                  onAddAllergy={handleAddAllergy}
+                  onRemoveAllergy={handleRemoveAllergy}
+                  onAddCondition={handleAddCondition}
+                  onRemoveCondition={handleRemoveCondition}
+                  onOpenContextModal={() => setIsContextModalOpen(true)}
+                />
+
+                {/* Section 3: Ground Flight Surgeon Link (with Send Bio-metric Ping action) */}
+                <SurgeonLinkCard
+                  surgeon={profile.assignedSurgeon}
+                  isEditing={isEditingInline}
+                  onSurgeonChange={handleSurgeonChange}
+                  onSendPingToast={(msg) => triggerToast(msg, 'success')}
+                />
+              </>
+            )}
 
             {/* Footer with NASA Space Apps Challenge Accreditation */}
             <footer className="pt-8 pb-12 border-t border-slate-800/80 text-xs sm:text-sm font-mono text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-4">

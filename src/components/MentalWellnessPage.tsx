@@ -1,0 +1,698 @@
+import React, { useState, useEffect, useRef, Suspense } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls, useGLTF } from '@react-three/drei';
+import * as THREE from 'three';
+import { 
+  Sparkles, 
+  Send, 
+  Mic, 
+  MicOff, 
+  Volume2, 
+  VolumeX, 
+  RotateCcw, 
+  Heart, 
+  Wind, 
+  Smile, 
+  Headphones, 
+  ShieldCheck,
+  RefreshCw,
+  Compass
+} from 'lucide-react';
+import { ChatMessage, AstronautProfile } from '../types/astronaut.ts';
+
+const AVATAR_MODEL_URL = '/models/corpus_mira_space_marine_bust.glb';
+
+// Pre-load the avatar model from local static storage
+try {
+  useGLTF.preload(AVATAR_MODEL_URL);
+} catch {
+  // Preload safety catch
+}
+
+// React Error Boundary to catch any WebGL or model loading faults
+class ModelErrorBoundary extends React.Component<
+  { fallback: React.ReactNode; children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err: any) {
+    console.warn('Avatar model failed to render, switching to fallback:', err?.message);
+  }
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
+
+// 3D Avatar component that renders the GLB bust and animates idle breathing
+function AvatarModel() {
+  const gltf = useGLTF(AVATAR_MODEL_URL);
+  const meshRef = useRef<THREE.Group | null>(null);
+
+  // Idle gentle breathing & floating animation
+  useFrame((state) => {
+    if (meshRef.current) {
+      const time = state.clock.getElapsedTime();
+      // Gentle vertical breathing wave
+      meshRef.current.position.y = -1.6 + Math.sin(time * 1.5) * 0.04;
+      // Slight slow yaw turn
+      meshRef.current.rotation.y = Math.sin(time * 0.5) * 0.08;
+    }
+  });
+
+  return (
+    <group ref={meshRef} position={[0, -1.6, 0]} scale={1.8}>
+      <primitive object={gltf.scene} />
+    </group>
+  );
+}
+
+// Fallback procedural avatar if 3D model is still loading or network is slow
+function AvatarFallback() {
+  const meshRef = useRef<THREE.Mesh | null>(null);
+
+  useFrame((state) => {
+    if (meshRef.current) {
+      const t = state.clock.getElapsedTime();
+      meshRef.current.rotation.y = t * 0.4;
+      meshRef.current.position.y = Math.sin(t * 1.8) * 0.08;
+    }
+  });
+
+  return (
+    <group position={[0, 0, 0]}>
+      {/* Head */}
+      <mesh ref={meshRef}>
+        <sphereGeometry args={[0.9, 32, 32]} />
+        <meshStandardMaterial
+          color="#a855f7"
+          roughness={0.2}
+          metalness={0.8}
+          emissive="#7c3aed"
+          emissiveIntensity={0.25}
+        />
+      </mesh>
+      {/* Visor */}
+      <mesh position={[0, 0.1, 0.75]}>
+        <boxGeometry args={[0.9, 0.35, 0.3]} />
+        <meshStandardMaterial
+          color="#00e5ff"
+          roughness={0.1}
+          metalness={0.9}
+          emissive="#00e5ff"
+          emissiveIntensity={0.5}
+        />
+      </mesh>
+      {/* Base collar */}
+      <mesh position={[0, -1.1, 0]}>
+        <cylinderGeometry args={[0.95, 1.2, 0.6, 32]} />
+        <meshStandardMaterial color="#1e1b4b" roughness={0.4} metalness={0.6} />
+      </mesh>
+    </group>
+  );
+}
+
+// 3D Avatar Scene Canvas
+function AvatarViewer() {
+  return (
+    <div className="relative w-full h-80 sm:h-96 rounded-2xl overflow-hidden bg-gradient-to-b from-[#140b2e]/80 to-[#070514]/90 border border-purple-500/40 shadow-[0_0_35px_rgba(168,85,247,0.25)]">
+      {/* Floating 3D HUD Reticles */}
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-2 px-3 py-1 rounded-lg bg-purple-950/80 border border-purple-500/40 text-purple-300 font-mono text-xs font-bold shadow-[0_0_12px_rgba(168,85,247,0.3)]">
+        <Sparkles className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+        <span>ASTRO AVATAR // IDLE SYNTHESIS</span>
+      </div>
+
+      <div className="absolute bottom-3 right-3 z-10 text-[11px] font-mono text-purple-300/80 bg-purple-950/70 px-2.5 py-1 rounded border border-purple-800">
+        DRAG TO ROTATE · SCROLL TO ZOOM
+      </div>
+
+      <Canvas camera={{ position: [0, 0, 3.8], fov: 42 }}>
+        <ambientLight intensity={1.2} />
+        {/* Soft violet key light */}
+        <directionalLight position={[4, 5, 4]} intensity={2.0} color="#e9d5ff" />
+        {/* Cool cyan rim light */}
+        <directionalLight position={[-4, 2, -3]} intensity={1.8} color="#00e5ff" />
+        {/* Warm bottom fill */}
+        <pointLight position={[0, -2, 2]} intensity={1.5} color="#c084fc" />
+
+        <Suspense fallback={<AvatarFallback />}>
+          <ModelErrorBoundary fallback={<AvatarFallback />}>
+            <AvatarModel />
+          </ModelErrorBoundary>
+        </Suspense>
+
+        <OrbitControls 
+          enableZoom={true} 
+          enablePan={false} 
+          minDistance={2.5} 
+          maxDistance={5.5}
+          maxPolarAngle={Math.PI / 1.7}
+          minPolarAngle={Math.PI / 3}
+        />
+      </Canvas>
+    </div>
+  );
+}
+
+// 4-4-4-4 Box Breathing Widget
+function BreathingExerciseWidget() {
+  const [phase, setPhase] = useState<'Inhale' | 'Hold (Full)' | 'Exhale' | 'Hold (Empty)'>('Inhale');
+  const [secondsLeft, setSecondsLeft] = useState<number>(4);
+  const [cyclesCompleted, setCyclesCompleted] = useState<number>(0);
+  const [isActive, setIsActive] = useState<boolean>(false); // Requirement: START/STOP only when user clicks button. Do not auto-start.
+  const [isAudioGuided, setIsAudioGuided] = useState<boolean>(true);
+
+  // Audio Guidance using Web Speech API
+  const speakInstruction = (text: string) => {
+    if (!isAudioGuided || !('speechSynthesis' in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.pitch = 0.95;
+      utterance.rate = 0.85; // Slow, soothing cadence
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      // Speech synthesis error catch
+    }
+  };
+
+  // Trigger speech on phase changes when active
+  const advancePhase = () => {
+    setPhase((current) => {
+      let next: 'Inhale' | 'Hold (Full)' | 'Exhale' | 'Hold (Empty)';
+      let speechWord = 'Inhale';
+
+      if (current === 'Inhale') {
+        next = 'Hold (Full)';
+        speechWord = 'Hold';
+      } else if (current === 'Hold (Full)') {
+        next = 'Exhale';
+        speechWord = 'Exhale';
+      } else if (current === 'Exhale') {
+        next = 'Hold (Empty)';
+        speechWord = 'Hold';
+      } else {
+        setCyclesCompleted((c) => c + 1);
+        next = 'Inhale';
+        speechWord = 'Inhale';
+      }
+
+      speakInstruction(speechWord);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!isActive) return;
+
+    // Speak initial phase when exercise starts
+    speakInstruction(phase === 'Inhale' ? 'Inhale' : phase.startsWith('Hold') ? 'Hold' : 'Exhale');
+
+    const interval = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          advancePhase();
+          return 4;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [isActive]);
+
+  const toggleExercise = () => {
+    if (isActive) {
+      setIsActive(false);
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    } else {
+      setIsActive(true);
+      setSecondsLeft(4);
+      setPhase('Inhale');
+    }
+  };
+
+  const isExpanding = phase === 'Inhale' || phase === 'Hold (Full)';
+
+  return (
+    <div className="glass-panel glass-panel-glow-purple p-6 rounded-2xl border border-purple-500/40 shadow-[0_0_35px_rgba(168,85,247,0.22)] space-y-4">
+      {/* Widget Header */}
+      <div className="flex items-center justify-between pb-3 border-b border-purple-900/50">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/40">
+            <Wind className="w-5 h-5 text-purple-300" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-white font-['Chakra_Petch',sans-serif] tracking-wide">
+              Neuro-Regulative Box Breathing
+            </h3>
+            <p className="text-xs text-purple-200">
+              4-4-4-4 Autonomic Nervous System Pacer
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Audio Guidance Toggle */}
+          <button
+            type="button"
+            onClick={() => setIsAudioGuided((prev) => !prev)}
+            title={isAudioGuided ? 'Voice guidance active' : 'Voice guidance muted'}
+            className={`p-1.5 rounded-lg border text-xs font-mono transition-colors ${
+              isAudioGuided
+                ? 'bg-purple-600/30 text-purple-200 border-purple-400/50'
+                : 'bg-purple-950/40 text-purple-400 border-purple-900/50'
+            }`}
+          >
+            {isAudioGuided ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          </button>
+
+          {/* Explicit START / STOP button (Requirement: Do not auto-start) */}
+          <button
+            type="button"
+            onClick={toggleExercise}
+            className={`px-4 py-1.5 rounded-xl text-xs font-mono font-extrabold tracking-wider transition-all cursor-pointer shadow-md ${
+              isActive
+                ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-[0_0_15px_rgba(244,63,94,0.4)]'
+                : 'bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_20px_rgba(168,85,247,0.4)]'
+            }`}
+          >
+            {isActive ? 'STOP EXERCISE' : 'START EXERCISE'}
+          </button>
+        </div>
+      </div>
+
+      {/* Required Note Banner */}
+      <div className="px-3.5 py-2 rounded-xl bg-purple-950/60 border border-purple-500/30 text-purple-200 text-xs font-sans flex items-center gap-2 shadow-inner">
+        <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+        <span>
+          <strong className="text-white">Clinical Note:</strong> Use this during moments of high stress or before sleep.
+        </span>
+      </div>
+
+      {/* Visual Expanding / Contracting Breathing Circle synced with Audio */}
+      <div className="flex flex-col items-center justify-center py-5">
+        <div className="relative flex items-center justify-center w-48 h-48 sm:w-56 sm:h-56">
+          {/* Outer glowing pulsing corona */}
+          <div
+            className={`absolute rounded-full transition-all duration-[3800ms] ease-in-out border border-purple-400/40 ${
+              isActive && isExpanding
+                ? 'w-48 h-48 sm:w-56 sm:h-56 bg-purple-600/25 shadow-[0_0_45px_rgba(168,85,247,0.5)] scale-100'
+                : isActive
+                ? 'w-24 h-24 sm:w-28 sm:h-28 bg-purple-600/10 shadow-[0_0_20px_rgba(168,85,247,0.25)] scale-90'
+                : 'w-32 h-32 bg-purple-900/10 border-purple-800/40 scale-95 opacity-50'
+            }`}
+          />
+
+          {/* Inner core circle */}
+          <div
+            className={`relative z-10 flex flex-col items-center justify-center rounded-full transition-all duration-[3800ms] ease-in-out border-2 border-purple-300 bg-gradient-to-br from-purple-900/90 to-[#140b2e]/95 text-white shadow-xl ${
+              isActive && isExpanding ? 'w-36 h-36 sm:w-44 sm:h-44' : 'w-26 h-26 sm:w-30 sm:h-30'
+            }`}
+          >
+            <span className="text-sm sm:text-base font-bold font-mono tracking-wider text-purple-200 uppercase text-center px-2">
+              {isActive ? phase : 'READY'}
+            </span>
+            <span className="text-2xl sm:text-3xl font-black font-mono text-white mt-1 tabular-nums">
+              {isActive ? `${secondsLeft}s` : '4-4-4-4'}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-4 text-xs font-mono text-purple-300 text-center space-y-1">
+          <div>
+            {isActive ? (
+              <>
+                Cycles Completed: <strong className="text-white">{cyclesCompleted}</strong> · Parasympathetic Coherence
+              </>
+            ) : (
+              <span className="text-purple-300">Click START EXERCISE to begin audio-guided box breathing</span>
+            )}
+          </div>
+          <div className="text-purple-400 text-[11px]">
+            Inhale (4s) → Hold (4s) → Exhale (4s) → Hold (4s)
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface MentalWellnessPageProps {
+  profile: AstronautProfile;
+}
+
+export const MentalWellnessPage: React.FC<MentalWellnessPageProps> = ({ profile }) => {
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: 'msg-init',
+      role: 'assistant',
+      content: `Hello Dr. Salma. I'm ASTRO, your dedicated clinical mental wellness companion for Expedition 74. We are 84 days into your mission. How are you feeling in the quiet of the station today?`,
+      timestamp: new Date().toISOString(),
+    },
+  ]);
+  const [inputMessage, setInputMessage] = useState<string>('');
+  const [isSending, setIsSending] = useState<boolean>(false);
+  const [isListening, setIsListening] = useState<boolean>(false);
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState<boolean>(true);
+  const chatBottomRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-scroll chat
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Voice speech synthesis
+  const speakMessage = (text: string) => {
+    if (!isVoiceEnabled || !('speechSynthesis' in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.pitch = 1.05;
+      utterance.rate = 0.95;
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      // SpeechSynthesis error catch
+    }
+  };
+
+  // Web Speech API Microphone Dictation
+  const toggleListening = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('Speech recognition is not supported in this browser. You can type your thoughts below.');
+      return;
+    }
+
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => setIsListening(true);
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          setInputMessage(transcript);
+          handleSendMessage(transcript);
+        }
+      };
+      recognition.onerror = () => setIsListening(false);
+      recognition.onend = () => setIsListening(false);
+
+      recognition.start();
+    } catch {
+      setIsListening(false);
+    }
+  };
+
+  // Send message to Gemini ASTRO backend proxy
+  const handleSendMessage = async (textToSend?: string) => {
+    const text = (textToSend || inputMessage).trim();
+    if (!text || isSending) return;
+
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: text,
+      timestamp: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    setInputMessage('');
+    setIsSending(true);
+
+    try {
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      });
+
+      const json = await res.json();
+      if (res.ok && json.success && json.reply) {
+        const assistantMsg: ChatMessage = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: json.reply,
+          timestamp: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+        speakMessage(json.reply);
+        return;
+      }
+      throw new Error(json.error || 'Connection to ASTRO lost. Please try again.');
+    } catch (err: any) {
+      const errorMsg = err?.message?.includes('Connection to ASTRO') 
+        ? err.message 
+        : 'Connection to ASTRO lost. Please try again.';
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: errorMsg,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+      speakMessage(errorMsg);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const quickPrompts = [
+    'Feeling homesick after 84 days in LEO',
+    'Struggling with sleep cycle in microgravity',
+    'Guide me through a quick grounding mindfulness exercise',
+  ];
+
+  return (
+    <div className="space-y-7 animate-in fade-in duration-300">
+      {/* Top Banner with Violet / Calming Theme */}
+      <div className="glass-panel glass-panel-glow-purple p-6 sm:p-7 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-purple-500/40 shadow-[0_0_35px_rgba(168,85,247,0.25)] bg-[#100a26]/85">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-purple-500/20 border border-purple-400/50 flex items-center justify-center text-purple-300 shadow-[0_0_20px_rgba(168,85,247,0.35)] shrink-0">
+            <Headphones className="w-7 h-7 text-purple-300" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white font-['Chakra_Petch',sans-serif] tracking-wide">
+                Mental Wellness & Cognitive Resilience
+              </h1>
+              <span className="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-purple-500/25 border border-purple-400/50 text-purple-200">
+                AI THERAPIST "ASTRO"
+              </span>
+            </div>
+            <p className="text-sm font-sans text-purple-200 mt-1">
+              Confidential, empathetic spaceflight psychological companion and autonomic regulation for <strong className="text-white">{profile.name}</strong>.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsVoiceEnabled((prev) => !prev)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all ${
+              isVoiceEnabled
+                ? 'bg-purple-600 text-white shadow-[0_0_15px_#9333ea]'
+                : 'bg-slate-900 text-slate-400 border border-slate-700'
+            }`}
+            title="Toggle ASTRO Voice Output"
+          >
+            {isVoiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            <span>VOICE {isVoiceEnabled ? 'ON' : 'OFF'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Grid: Left Column (3D Avatar + Box Breathing) & Right Column (AI Chat) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-7">
+        {/* Left Column (5 Cols): 3D Avatar & Breathing Exercise */}
+        <div className="lg:col-span-5 space-y-6">
+          {/* 3D Avatar Viewer */}
+          <AvatarViewer />
+
+          {/* Breathing Exercise Widget */}
+          <BreathingExerciseWidget />
+        </div>
+
+        {/* Right Column (7 Cols): AI Chat Interface (Gemini Live / Speech) */}
+        <div className="lg:col-span-7 flex flex-col h-[650px] glass-panel glass-panel-glow-purple rounded-2xl border border-purple-500/40 shadow-[0_0_35px_rgba(168,85,247,0.22)] overflow-hidden bg-[#0d0920]/90">
+          {/* Chat Header */}
+          <div className="p-4 sm:p-5 border-b border-purple-900/60 bg-[#130b2c]/80 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-10 h-10 rounded-xl bg-purple-600/30 border border-purple-400/60 flex items-center justify-center text-purple-200 font-bold font-mono">
+                  AS
+                </div>
+                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-black shadow-[0_0_8px_#10b981]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-white text-base font-['Chakra_Petch',sans-serif]">
+                    ASTRO Mental Companion
+                  </h3>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-500/40">
+                    GEMINI LIVE PROTOCOL
+                  </span>
+                </div>
+                <div className="text-xs text-purple-200 font-sans">
+                  End-to-End Encrypted Crew Cabin Channel · CBT & Stress Mitigation
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setMessages([
+                  {
+                    id: 'msg-reset',
+                    role: 'assistant',
+                    content: `Channel refreshed, Dr. Salma. I am here whenever you're ready to talk.`,
+                    timestamp: new Date().toISOString(),
+                  },
+                ]);
+              }}
+              title="Reset conversation"
+              className="p-2 rounded-lg bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border border-purple-800 transition-colors"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Quick Prompts Strip */}
+          <div className="px-4 py-2 bg-purple-950/40 border-b border-purple-900/40 flex items-center gap-2 overflow-x-auto text-xs font-mono">
+            <span className="text-purple-400 font-bold shrink-0">STARTERS:</span>
+            {quickPrompts.map((q, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleSendMessage(q)}
+                disabled={isSending}
+                className="px-2.5 py-1 rounded bg-purple-900/40 hover:bg-purple-800/60 border border-purple-700/60 text-purple-200 shrink-0 transition-colors text-[11px]"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+
+          {/* Messages Stream */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+            {messages.map((msg) => {
+              const isUser = msg.role === 'user';
+              return (
+                <div
+                  key={msg.id}
+                  className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
+                >
+                  <div
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center font-mono text-xs font-bold shrink-0 ${
+                      isUser
+                        ? 'bg-[#00E5FF] text-black shadow-[0_0_12px_#00E5FF]'
+                        : 'bg-purple-600 text-white shadow-[0_0_12px_#9333ea]'
+                    }`}
+                  >
+                    {isUser ? 'SJ' : 'AI'}
+                  </div>
+
+                  <div
+                    className={`max-w-[82%] rounded-2xl p-4 text-sm font-sans leading-relaxed ${
+                      isUser
+                        ? 'bg-[#00E5FF]/15 border border-[#00E5FF]/40 text-white shadow-[0_0_18px_rgba(0,229,255,0.15)] rounded-tr-none'
+                        : 'bg-purple-950/70 border border-purple-500/40 text-purple-50 shadow-[0_0_18px_rgba(168,85,247,0.15)] rounded-tl-none'
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    <div
+                      className={`mt-1.5 text-[10px] font-mono text-right ${
+                        isUser ? 'text-cyan-300' : 'text-purple-300'
+                      }`}
+                    >
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {isSending && (
+              <div className="flex items-center gap-3 text-purple-300 font-mono text-xs">
+                <div className="w-8 h-8 rounded-lg bg-purple-600/50 flex items-center justify-center">
+                  <Sparkles className="w-4 h-4 text-purple-200 animate-spin" />
+                </div>
+                <div className="p-3 rounded-xl bg-purple-950/60 border border-purple-800/80 animate-pulse">
+                  ASTRO is synthesizing supportive reflection...
+                </div>
+              </div>
+            )}
+            <div ref={chatBottomRef} />
+          </div>
+
+          {/* Chat Input Bar */}
+          <div className="p-4 border-t border-purple-900/60 bg-[#130b2c]/90">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSendMessage();
+              }}
+              className="flex items-center gap-2.5"
+            >
+              {/* Mic Speech-to-Text Button */}
+              <button
+                type="button"
+                onClick={toggleListening}
+                className={`p-3 rounded-xl border transition-all ${
+                  isListening
+                    ? 'bg-rose-500 text-white border-rose-400 animate-pulse shadow-[0_0_20px_#f43f5e]'
+                    : 'bg-purple-900/40 text-purple-200 border-purple-600/50 hover:bg-purple-800/50'
+                }`}
+                title={isListening ? 'Listening... click to stop' : 'Click to speak via Web Speech API'}
+              >
+                {isListening ? <MicOff className="w-5 h-5 text-white" /> : <Mic className="w-5 h-5" />}
+              </button>
+
+              <input
+                type="text"
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                placeholder={isListening ? 'Listening to your voice...' : 'Type your thoughts or feelings to ASTRO...'}
+                disabled={isSending}
+                className="flex-1 bg-purple-950/80 border border-purple-500/50 text-white placeholder-purple-300/60 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 font-sans"
+              />
+
+              <button
+                type="submit"
+                disabled={!inputMessage.trim() || isSending}
+                className="px-5 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-mono font-bold text-sm flex items-center gap-1.5 transition-all shadow-[0_0_20px_rgba(168,85,247,0.4)] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Send className="w-4 h-4" />
+                <span className="hidden sm:inline">SEND</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

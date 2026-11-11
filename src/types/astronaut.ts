@@ -58,3 +58,72 @@ export const UpdateProfileSchema = z.object({
 });
 
 export type UpdateProfileInput = z.infer<typeof UpdateProfileSchema>;
+
+export interface HistoricalHeartRatePoint {
+  date: string;
+  dayLabel: string;
+  hr: number;
+  baseline: number;
+  min: number;
+  max: number;
+}
+
+export interface VitalsData {
+  heartRate: number; // bpm
+  bloodPressureSys: number; // mmHg
+  bloodPressureDia: number; // mmHg
+  spO2: number; // %
+  temperature: number; // °C
+  respiratoryRate: number; // breaths/min
+  sleepHours: number; // hours
+  weightKg?: number; // kg
+  hrvMs: number; // Heart Rate Variability (ms)
+  timestamp: string;
+  historicalHeartRate: HistoricalHeartRatePoint[];
+}
+
+export interface SymptomReport {
+  id: string;
+  bodyPart: string;
+  meshId?: string;
+  painType: 'Sharp' | 'Dull' | 'Burning';
+  intensity: number; // 0 - 10
+  notes: string;
+  timestamp: string;
+  status: 'active' | 'monitoring' | 'resolved';
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
+export interface DailyCheckIn {
+  id: string;
+  astronautId: string;
+  missionDay: number;
+  mood: 'Nominal / Focused' | 'Mild Fatigue' | 'High Stress' | 'Homesick' | 'Optimistic';
+  energyLevel: number; // 1 - 10
+  sleepQuality: 'Deep & Restorative' | 'Fragmented' | 'Restless / MicroG Noise' | 'Insomnia';
+  sleepHours: number;
+  hydrationLiters: number;
+  spaceAdaptationSymptoms: string[];
+  notes: string;
+  timestamp: string;
+}
+
+export type TimelineEventType = 'vitals' | 'symptom' | 'ai_insight' | 'checkin' | 'exercise_eva';
+
+export interface TimelineEvent {
+  id: string;
+  type: TimelineEventType;
+  title: string;
+  summary: string;
+  details?: Record<string, any>;
+  timestamp: string;
+  severity?: 'nominal' | 'warning' | 'alert' | 'info';
+  badge?: string;
+}
+

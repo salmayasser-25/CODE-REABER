@@ -3,10 +3,11 @@ import {
   UserCheck, 
   Activity, 
   Stethoscope, 
-  Dna, 
   Cpu, 
   Orbit,
-  Lock
+  Heart,
+  ClipboardCheck,
+  Clock
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -18,6 +19,7 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab = 'profile',
+  onSelectTab,
   astronautName = 'Dr. Salma Johnson',
   callsign = 'Nova',
 }) => {
@@ -27,40 +29,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Astronaut Profile',
       sublabel: 'Crew Dossier & Adaptations',
       icon: UserCheck,
-      active: true,
-      phase: 'Phase 1 Active',
+      phase: 'Dossier Core',
     },
     {
       id: 'vitals',
-      label: 'Biometric Telemetry',
-      sublabel: 'ECG, SpO2 & Hemodynamics',
+      label: 'Vital Signs & AI',
+      sublabel: 'Biometrics & Gemini Insight',
       icon: Activity,
-      active: false,
-      phase: 'Phase 2',
+      phase: 'Live Telemetry',
     },
     {
-      id: 'symptoms',
-      label: 'Diagnostic Matrix',
-      sublabel: 'SANS & Decompression Analysis',
+      id: 'checkin',
+      label: 'Daily Health Check-in',
+      sublabel: 'Subjective Mood & Sleep',
+      icon: ClipboardCheck,
+      phase: 'Daily Survey',
+    },
+    {
+      id: 'mental',
+      label: 'Mental Wellness',
+      sublabel: '3D Avatar & AI Therapist',
+      icon: Heart,
+      phase: 'Psych Support',
+    },
+    {
+      id: 'body3d',
+      label: 'Interactive 3D Body',
+      sublabel: 'Hologram Symptom Mapping',
       icon: Stethoscope,
-      active: false,
-      phase: 'Phase 3',
+      phase: '3D Sensor Map',
     },
     {
-      id: 'countermeasures',
-      label: 'Countermeasures',
-      sublabel: 'ARED Protocols & SkinSuit',
-      icon: Dna,
-      active: false,
-      phase: 'Phase 4',
-    },
-    {
-      id: 'surgeon-link',
-      label: 'Surgeon Direct Uplink',
-      sublabel: 'Telemedicine Ground Control',
-      icon: Cpu,
-      active: false,
-      phase: 'Phase 5',
+      id: 'timeline',
+      label: 'Medical Timeline',
+      sublabel: 'Chronology & Flight Audit',
+      icon: Clock,
+      phase: 'MET Telemetry Log',
     },
   ];
 
@@ -78,14 +82,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               const isCurrent = item.id === currentTab;
 
               return (
-                <div
+                <button
+                  type="button"
                   key={item.id}
-                  className={`w-full text-left rounded-xl p-3.5 transition-all duration-200 border ${
+                  onClick={() => onSelectTab?.(item.id)}
+                  className={`w-full text-left rounded-xl p-3.5 transition-all duration-200 border cursor-pointer ${
                     isCurrent
-                      ? 'bg-[#00E5FF]/15 border-[#00E5FF]/60 text-white shadow-[0_0_20px_rgba(0,229,255,0.25)] cursor-pointer'
-                      : 'border-slate-800/80 bg-slate-900/30 text-slate-300 hover:text-white hover:bg-slate-800/60 cursor-not-allowed opacity-85'
+                      ? 'bg-[#00E5FF]/15 border-[#00E5FF]/60 text-white shadow-[0_0_22px_rgba(0,229,255,0.3)]'
+                      : 'border-slate-800/80 bg-slate-900/30 text-slate-300 hover:text-white hover:bg-slate-800/70 hover:border-slate-700'
                   }`}
-                  title={isCurrent ? item.label : `${item.label} (Scheduled for ${item.phase})`}
+                  title={item.label}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
@@ -101,9 +107,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <div>
                         <div className="text-sm font-bold tracking-wide font-['Chakra_Petch',sans-serif] flex items-center gap-1.5 text-white">
                           {item.label}
-                          {!isCurrent && (
-                            <Lock className="w-3.5 h-3.5 text-slate-400 inline-block" />
-                          )}
                         </div>
                         <div className="text-xs text-slate-300 font-sans line-clamp-1 mt-0.5">
                           {item.sublabel}
@@ -127,7 +130,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       </span>
                     )}
                   </div>
-                </div>
+                </button>
               );
             })}
           </nav>
