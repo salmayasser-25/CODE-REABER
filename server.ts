@@ -41,7 +41,15 @@ import {
   reviewExchangedReport,
   forwardExchangedReport,
   deleteExchangedReport,
+  addTimelineEvent,
 } from './src/server/mockDb.ts';
+import {
+  getNutritionInventory,
+  getDailyNutritionLog,
+  takeNutrientItem,
+  logHydration,
+  getInventoryAlerts,
+} from './src/server/nutriDb.ts';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -1269,6 +1277,152 @@ Instructions:
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error?.message || 'Failed to process chat message' });
+  }
+});
+
+// ─── NutriLog & Bio-Kitchen API Endpoints ─────────────────────────────────────
+
+app.get('/api/nutrition/inventory', (_req: Request, res: Response) => {
+  try {
+    const inventory = getNutritionInventory();
+    res.json({ success: true, data: inventory });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch inventory' });
+  }
+});
+
+app.get('/api/nutrition/daily-log', (_req: Request, res: Response) => {
+  try {
+    const log = getDailyNutritionLog();
+    res.json({ success: true, data: log });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch daily nutrition log' });
+  }
+});
+
+app.get('/api/nutrition/alerts', (_req: Request, res: Response) => {
+  try {
+    const alerts = getInventoryAlerts();
+    res.json({ success: true, data: alerts });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch inventory alerts' });
+  }
+});
+
+app.post('/api/nutrition/take', (req: Request, res: Response) => {
+  try {
+    const { itemId, qty = 1 } = req.body;
+    if (!itemId) {
+      return res.status(400).json({ success: false, error: 'itemId is required' });
+    }
+
+    const result = takeNutrientItem(itemId, Number(qty));
+    if (!result) {
+      return res.status(404).json({ success: false, error: 'Item not found or insufficient stock' });
+    }
+
+    addTimelineEvent({
+      type: 'vitals',
+      title: `Nutrition Intake: ${result.item.name}`,
+      summary: `Administered ${qty}x ${result.item.unit} (${result.item.category}). Calories: +${(result.item.calories || 0) * qty} kcal. Key nutrients: ${result.item.keyNutrients.join(', ')}`,
+      severity: 'nominal',
+      badge: 'NUTRILOG',
+      details: {
+        itemId: result.item.id,
+        category: result.item.category,
+        remainingStock: result.item.currentStock,
+      },
+    });
+
+    res.json({
+      success: true,
+      item: result.item,
+      log: result.log,
+      message: `${result.item.name} recorded and inventory synchronized.`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to log nutrient consumption' });
+  }
+});
+
+app.post('/api/nutrition/hydration', (req: Request, res: Response) => {
+  try {
+    const { amountMl } = req.body;
+    if (!amountMl || typeof amountMl !== 'number') {
+      return res.status(400).json({ success: false, error: 'Valid amountMl number is required' });
+    }
+
+    const log = logHydration(amountMl);
+
+    if (log.hydrationLiters >= 2.0 && log.hydrationLiters - (amountMl / 1000) < 2.0) {
+      addTimelineEvent({
+        type: 'vitals',
+        title: 'Daily Hydration Milestone Reached',
+        summary: `Current intake: ${log.hydrationLiters} L / 2.5 L goal. Counteracting cephalic fluid shift and renal calculus risk.`,
+        severity: 'nominal',
+        badge: 'HYDRATION',
+      });
+    }
+
+    res.json({ success: true, log, message: `+${amountMl} mL hydration logged.` });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to log hydration' });
+  }
+});
+
+app.post('/api/nutrition/ai-plan', async (req: Request, res: Response) => {
+  try {
+    const { profile } = req.body;
+    const radDose = profile?.radiationDoseMsv ?? 14.8;
+    const spineDelta = profile?.spineElongation ?? 4.2;
+    const hr = profile?.restingHeartRate ?? 58;
+    const missionDay = profile?.missionElapsedDays ?? 84;
+
+    const ai = getGeminiClient();
+    if (ai) {
+      try {
+        const prompt = `You are the NASA Flight Surgeon & Space Nutrition Lead aboard the Artemis / ISS Expedition.
+Generate a concise, 4 to 5 bullet point Daily Space Nutrition & Countermeasure Protocol for Astronaut Dr. Salma Johnson (MET Day ${missionDay}):
+- Cumulative Ionizing Radiation Dose: ${radDose} mSv
+- Microgravity Spine Elongation: +${spineDelta} cm
+- Resting Baseline HR: ${hr} bpm
+
+Requirements:
+- Specify exact NASA dietary countermeasures (e.g. Lycopene/Vitamin E for radiation DNA protection, Calcium/D3 & Collagen for microgravity bone demineralization, Electrolytes for fluid shift).
+- Tone: Professional aerospace clinical protocol. Bullet points starting with emojis.`;
+
+        const response: any = await Promise.race([
+          ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: prompt,
+          }),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('AI request timeout')), 5000)),
+        ]);
+
+        const text = response.text?.trim();
+        if (text) {
+          return res.json({ success: true, plan: text, source: 'gemini-3.8-flash' });
+        }
+      } catch (geminiError: any) {
+        console.warn('[Gemini Nutri Plan fallback]:', geminiError?.message);
+      }
+    }
+
+    const fallbackLines = [
+      `🍅 Radiation Protocol: Cumulative dose at ${radDose} mSv. Prioritize 1x Lycopene Pouch + 2x Vitamin E & C Shield Tablets to quench ionizing free radicals.`,
+      `🦴 Musculoskeletal Countermeasure: +${spineDelta} cm spinal elongation detected. Take Calcium-D3 Yogurt Pouch + Collagen Pack post-ARED resistance workout.`,
+      `💧 Electrolyte & Fluid Balance: Drink minimum 2.5 L treated water with 1x Electrolyte Sachet to prevent orthostatic intolerance.`,
+      `😴 Circadian & Recovery: Take Magnesium Glycinate + Chamomile Infusion 45 minutes before sleep pod light dimming.`,
+      `🧠 Neuro-Cognitive Defense: 2x Omega-3 DHA/EPA softgels with lunch to preserve neuronal membranes against cosmic ray micro-trauma.`,
+    ];
+
+    res.json({
+      success: true,
+      plan: fallbackLines.join('\n'),
+      source: 'aerospace-clinical-matrix',
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to generate meal plan' });
   }
 });
 

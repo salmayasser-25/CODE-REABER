@@ -11,7 +11,8 @@ import {
   MessagesSquare, 
   Orbit,
   Stethoscope,
-  Radio
+  Radio,
+  ChefHat
 } from 'lucide-react';
 
 interface FlightSurgeonSidebarProps {
@@ -72,6 +73,13 @@ export const FlightSurgeonSidebar: React.FC<FlightSurgeonSidebarProps> = ({
       sublabel: 'ARED / CEVIS Countermeasures',
       icon: Dumbbell,
       badge: 'WORKOUT',
+    },
+    {
+      id: 'nutrition',
+      label: 'Space Nutrition & Galley',
+      sublabel: 'NutriLog, Smart Fridge & Stock',
+      icon: ChefHat,
+      badge: 'GALLEY',
     },
     {
       id: 'restrictions',

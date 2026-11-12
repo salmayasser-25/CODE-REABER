@@ -8,6 +8,7 @@ import { IndividualAstronautProfile } from './components/IndividualAstronautProf
 import { HealthAnalyticsPage } from './components/HealthAnalyticsPage.tsx';
 import { MedicalRecordsPage } from './components/MedicalRecordsPage.tsx';
 import { ExerciseMonitoringPage } from './components/ExerciseMonitoringPage.tsx';
+import { NutriLogPage } from './components/NutriLogPage.tsx';
 import { MedicalRestrictionsPage } from './components/MedicalRestrictionsPage.tsx';
 import { MedicalReportsPage } from './components/MedicalReportsPage.tsx';
 import { MedicalCommunicationsPage } from './components/MedicalCommunicationsPage.tsx';
@@ -607,6 +608,11 @@ export default function App() {
                 profile={profile}
                 onNavigateToRestrictions={() => setCurrentTab('restrictions')}
               />
+            )}
+
+            {/* View: Space Nutrition & Galley Module (NutriLog) */}
+            {currentTab === 'nutrition' && (
+              <NutriLogPage profile={profile} />
             )}
 
             {/* View 7: Medical Restrictions */}
