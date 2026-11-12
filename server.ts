@@ -1436,9 +1436,17 @@ async function startServer() {
     });
     app.use(vite.middlewares);
 
-    // Serve transformed index.html for all non-API GET requests in dev mode
+    // Serve transformed index.html ONLY for navigation routes (not scripts/assets)
     app.get('*', async (req: Request, res: Response, next) => {
-      if (req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/models')) {
+      const url = req.originalUrl.split('?')[0];
+      if (
+        url.startsWith('/api') ||
+        url.startsWith('/models') ||
+        url.startsWith('/@') ||
+        url.startsWith('/node_modules') ||
+        url.startsWith('/src') ||
+        url.includes('.')
+      ) {
         return next();
       }
       try {

@@ -13,50 +13,50 @@ interface NutriLogPageProps {
 
 // ── Category meta ──────────────────────────────────────────────────────────────
 const CATEGORY_META: Record<NutrientCategory, { label: string; icon: React.ElementType; color: string; border: string; glow: string }> = {
-  'radiation-shield': { label: 'Radiation Shield', icon: ShieldCheck, color: 'text-rose-400',   border: 'border-rose-500/40',   glow: 'shadow-[0_0_18px_rgba(244,63,94,0.25)]' },
-  'bone-muscle':      { label: 'Bone & Muscle',    icon: Zap,          color: 'text-sky-400',    border: 'border-sky-500/40',    glow: 'shadow-[0_0_18px_rgba(14,165,233,0.25)]' },
-  'hydration':        { label: 'Hydration',         icon: Droplets,     color: 'text-cyan-400',   border: 'border-cyan-500/40',   glow: 'shadow-[0_0_18px_rgba(6,182,212,0.25)]' },
-  'sleep-recovery':   { label: 'Sleep & Recovery',  icon: Moon,         color: 'text-indigo-400', border: 'border-indigo-500/40', glow: 'shadow-[0_0_18px_rgba(99,102,241,0.25)]' },
-  'cognitive':        { label: 'Cognitive',          icon: Brain,        color: 'text-violet-400', border: 'border-violet-500/40', glow: 'shadow-[0_0_18px_rgba(139,92,246,0.25)]' },
-  'general':          { label: 'General Nutrition',  icon: Apple,        color: 'text-emerald-400',border: 'border-emerald-500/40',glow: 'shadow-[0_0_18px_rgba(16,185,129,0.25)]' },
+  'radiation-shield': { label: 'Radiation Shield', icon: ShieldCheck, color: 'text-rose-400', border: 'border-rose-500/40', glow: 'shadow-[0_0_18px_rgba(244,63,94,0.25)]' },
+  'bone-muscle': { label: 'Bone & Muscle', icon: Zap, color: 'text-sky-400', border: 'border-sky-500/40', glow: 'shadow-[0_0_18px_rgba(14,165,233,0.25)]' },
+  'hydration': { label: 'Hydration', icon: Droplets, color: 'text-cyan-400', border: 'border-cyan-500/40', glow: 'shadow-[0_0_18px_rgba(6,182,212,0.25)]' },
+  'sleep-recovery': { label: 'Sleep & Recovery', icon: Moon, color: 'text-indigo-400', border: 'border-indigo-500/40', glow: 'shadow-[0_0_18px_rgba(99,102,241,0.25)]' },
+  'cognitive': { label: 'Cognitive', icon: Brain, color: 'text-violet-400', border: 'border-violet-500/40', glow: 'shadow-[0_0_18px_rgba(139,92,246,0.25)]' },
+  'general': { label: 'General Nutrition', icon: Apple, color: 'text-emerald-400', border: 'border-emerald-500/40', glow: 'shadow-[0_0_18px_rgba(16,185,129,0.25)]' },
 };
 
 const HYDRATION_CUPS = [150, 200, 250, 350, 500]; // mL presets
 
 // ── Colour token → Tailwind class maps ────────────────────────────────────────
-function colorBg(c: string)     { return `bg-${c}-500/15`; }
+function colorBg(c: string) { return `bg-${c}-500/15`; }
 function colorBorder(c: string) { return `border-${c}-500/40`; }
-function colorText(c: string)   { return `text-${c}-400`; }
-function colorBtn(c: string)    { return `bg-${c}-500 hover:bg-${c}-400`; }
+function colorText(c: string) { return `text-${c}-400`; }
+function colorBtn(c: string) { return `bg-${c}-500 hover:bg-${c}-400`; }
 
 function inventoryStatus(item: NutrientItem): 'full' | 'adequate' | 'low' | 'critical' {
   const pct = item.currentStock / item.initialStock;
-  if (pct > 0.5)  return 'full';
+  if (pct > 0.5) return 'full';
   if (pct > 0.25) return 'adequate';
   if (pct > 0.10) return 'low';
   return 'critical';
 }
 
 const STATUS_PILL: Record<string, string> = {
-  full:     'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+  full: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
   adequate: 'bg-sky-500/20 text-sky-300 border-sky-500/40',
-  low:      'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  low: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
   critical: 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse',
 };
 
 export const NutriLogPage: React.FC<NutriLogPageProps> = ({ profile }) => {
-  const [inventory, setInventory]           = useState<NutrientItem[]>([]);
-  const [dailyLog, setDailyLog]             = useState<DailyNutritionLog | null>(null);
-  const [alerts, setAlerts]                 = useState<any[]>([]);
+  const [inventory, setInventory] = useState<NutrientItem[]>([]);
+  const [dailyLog, setDailyLog] = useState<DailyNutritionLog | null>(null);
+  const [alerts, setAlerts] = useState<any[]>([]);
   const [activeCategory, setActiveCategory] = useState<NutrientCategory | 'all'>('all');
-  const [takenIds, setTakenIds]             = useState<Set<string>>(new Set());
-  const [loadingId, setLoadingId]           = useState<string | null>(null);
-  const [toast, setToast]                   = useState<{ text: string; type: 'success' | 'warn' | 'error' } | null>(null);
-  const [hydAmt, setHydAmt]                 = useState<number>(250);
-  const [loggingHyd, setLoggingHyd]         = useState(false);
-  const [expandedId, setExpandedId]         = useState<string | null>(null);
-  const [aiPlan, setAiPlan]                 = useState<string>('');
-  const [planLoading, setPlanLoading]       = useState(false);
+  const [takenIds, setTakenIds] = useState<Set<string>>(new Set());
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ text: string; type: 'success' | 'warn' | 'error' } | null>(null);
+  const [hydAmt, setHydAmt] = useState<number>(250);
+  const [loggingHyd, setLoggingHyd] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [aiPlan, setAiPlan] = useState<string>('');
+  const [planLoading, setPlanLoading] = useState(false);
 
   const showToast = (text: string, type: 'success' | 'warn' | 'error' = 'success') => {
     setToast({ text, type });
@@ -71,8 +71,8 @@ export const NutriLogPage: React.FC<NutriLogPageProps> = ({ profile }) => {
         fetch('/api/nutrition/daily-log'),
         fetch('/api/nutrition/alerts'),
       ]);
-      if (invRes.ok)   { const j = await invRes.json();   if (j.success) setInventory(j.data); }
-      if (logRes.ok)   { const j = await logRes.json();   if (j.success) setDailyLog(j.data); }
+      if (invRes.ok) { const j = await invRes.json(); if (j.success) setInventory(j.data); }
+      if (logRes.ok) { const j = await logRes.json(); if (j.success) setDailyLog(j.data); }
       if (alertRes.ok) { const j = await alertRes.json(); if (j.success) setAlerts(j.data); }
     } catch {
       // offline fallback – leave state empty
@@ -97,8 +97,8 @@ export const NutriLogPage: React.FC<NutriLogPageProps> = ({ profile }) => {
     } catch {
       // Rule-based local fallback
       const lines: string[] = [];
-      if (profile.radiationDoseMsv > 15)  lines.push('⚡ Radiation elevated → prioritise Lycopene Pouch + Vitamin E & C tablet today.');
-      if (profile.spineElongation > 3)    lines.push('🦴 Spinal elongation active → Calcium-D3 Yogurt + Collagen Pack are essential.');
+      if (profile.radiationDoseMsv > 15) lines.push('⚡ Radiation elevated → prioritise Lycopene Pouch + Vitamin E & C tablet today.');
+      if (profile.spineElongation > 3) lines.push('🦴 Spinal elongation active → Calcium-D3 Yogurt + Collagen Pack are essential.');
       lines.push('💧 Target 2.5 L hydration before 20:00 UTC.');
       lines.push('😴 Sleep < 6 h last night → take Magnesium Glycinate + Chamomile Infusion 1 h before sleep.');
       lines.push('🧠 Cognitive support → Omega-3 DHA/EPA softgels with breakfast pouch.');
@@ -166,12 +166,12 @@ export const NutriLogPage: React.FC<NutriLogPageProps> = ({ profile }) => {
   };
 
   // ── Derived display values ──────────────────────────────────────────────────
-  const hydLiters   = dailyLog?.hydrationLiters ?? 0;
-  const hydGoal     = dailyLog?.hydrationGoalLiters ?? 2.5;
-  const hydPct      = Math.min(100, Math.round((hydLiters / hydGoal) * 100));
-  const nutriScore  = dailyLog?.nutritionScore ?? 0;
-  const totalCal    = dailyLog?.totalCalories ?? 0;
-  const consumed    = dailyLog?.consumedItems ?? [];
+  const hydLiters = dailyLog?.hydrationLiters ?? 0;
+  const hydGoal = dailyLog?.hydrationGoalLiters ?? 2.5;
+  const hydPct = Math.min(100, Math.round((hydLiters / hydGoal) * 100));
+  const nutriScore = dailyLog?.nutritionScore ?? 0;
+  const totalCal = dailyLog?.totalCalories ?? 0;
+  const consumed = dailyLog?.consumedItems ?? [];
 
   const displayed = activeCategory === 'all'
     ? inventory
@@ -185,10 +185,10 @@ export const NutriLogPage: React.FC<NutriLogPageProps> = ({ profile }) => {
         const { metric, threshold, direction } = item.healthTrigger;
         const val: Record<string, number> = {
           radiation: profile.radiationDoseMsv,
-          bone:      100,
-          sleep:     6,
+          bone: 100,
+          sleep: 6,
           heartRate: profile.restingHeartRate,
-          spO2:      profile.spO2Baseline,
+          spO2: profile.spO2Baseline,
         };
         const v = val[metric] ?? 0;
         return direction === 'above' ? v > threshold : v < threshold;
@@ -358,12 +358,12 @@ export const NutriLogPage: React.FC<NutriLogPageProps> = ({ profile }) => {
       {/* ── Inventory Grid ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {displayed.map((item) => {
-          const status    = inventoryStatus(item);
-          const isTaken   = takenIds.has(item.id);
+          const status = inventoryStatus(item);
+          const isTaken = takenIds.has(item.id);
           const isLoading = loadingId === item.id;
           const isPriority = priorityIds.has(item.id);
-          const pctStock   = Math.round((item.currentStock / item.initialStock) * 100);
-          const catMeta    = CATEGORY_META[item.category];
+          const pctStock = Math.round((item.currentStock / item.initialStock) * 100);
+          const catMeta = CATEGORY_META[item.category];
           const isExpanded = expandedId === item.id;
 
           return (
@@ -436,13 +436,12 @@ export const NutriLogPage: React.FC<NutriLogPageProps> = ({ profile }) => {
               {/* Actions */}
               <div className="flex items-center gap-2">
                 <button onClick={() => handleTake(item.id)} disabled={isLoading || item.currentStock === 0}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl font-extrabold text-xs transition-all shadow-md ${
-                    isTaken
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl font-extrabold text-xs transition-all shadow-md ${isTaken
                       ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 cursor-default'
                       : item.currentStock === 0
-                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                      : `${colorBtn(item.color)} text-black`
-                  }`}>
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                        : `${colorBtn(item.color)} text-black`
+                    }`}>
                   {isLoading ? (
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                   ) : isTaken ? (
@@ -492,11 +491,11 @@ export const NutriLogPage: React.FC<NutriLogPageProps> = ({ profile }) => {
       {toast && (
         <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-xl border-2 font-mono text-sm font-semibold backdrop-blur-xl shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-200
           ${toast.type === 'success' ? 'bg-[#080e22]/95 border-[#00E5FF]/60 text-white shadow-[0_0_30px_rgba(0,229,255,0.4)]'
-          : toast.type === 'warn'    ? 'bg-[#1a1200]/95 border-amber-500/60 text-amber-200'
-          : 'bg-[#1a0808]/95 border-rose-500/60 text-rose-200'}`}>
+            : toast.type === 'warn' ? 'bg-[#1a1200]/95 border-amber-500/60 text-amber-200'
+              : 'bg-[#1a0808]/95 border-rose-500/60 text-rose-200'}`}>
           {toast.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-           : toast.type === 'warn'  ? <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
-           : <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />}
+            : toast.type === 'warn' ? <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+              : <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />}
           <span>{toast.text}</span>
         </div>
       )}
