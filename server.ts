@@ -6,8 +6,8 @@ import { GoogleGenAI } from '@google/genai';
 import Groq from 'groq-sdk';
 import { UpdateProfileSchema } from './src/types/astronaut.ts';
 import type { ExerciseCategory, FitnessAIAnalysis } from './src/types/astronaut.ts';
-import { 
-  getProfile, 
+import {
+  getProfile,
   updateProfile,
   getVitals,
   updateVitals,
@@ -1429,43 +1429,35 @@ Requirements:
 
 // Mount Vite or static server
 async function startServer() {
-  if (!isProd) {
+  const fs = await import('fs');
+  const path = await import('path');
+
+  // 1. Serve public static assets (images, icons, 3D models)
+  app.use(express.static(path.resolve(process.cwd(), 'public')));
+
+  // 2. Check for built production bundle in dist/
+  const distPath = path.resolve(process.cwd(), 'dist');
+  const hasDist = fs.existsSync(path.resolve(distPath, 'index.html'));
+
+  if (isProd || hasDist) {
+    app.use(express.static(distPath));
+    app.get('*', (req: Request, res: Response, next) => {
+      if (req.originalUrl.startsWith('/api')) return next();
+      res.sendFile(path.resolve(distPath, 'index.html'));
+    });
+  } else {
+    // 3. Vite development SPA middleware
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-
-    // Serve transformed index.html ONLY for navigation routes (not scripts/assets)
-    app.get('*', async (req: Request, res: Response, next) => {
-      const url = req.originalUrl.split('?')[0];
-      if (
-        url.startsWith('/api') ||
-        url.startsWith('/models') ||
-        url.startsWith('/@') ||
-        url.startsWith('/node_modules') ||
-        url.startsWith('/src') ||
-        url.includes('.')
-      ) {
-        return next();
-      }
-      try {
-        const fs = await import('fs');
-        const path = await import('path');
-        const indexPath = path.resolve(process.cwd(), 'index.html');
-        let template = fs.readFileSync(indexPath, 'utf-8');
-        template = await vite.transformIndexHtml(req.originalUrl, template);
-        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
-      } catch (e: any) {
-        next(e);
-      }
-    });
-  } else {
-    app.use(express.static('dist'));
-    app.get('*', (_req: Request, res: Response) => {
-      res.sendFile('dist/index.html', { root: '.' });
-    });
   }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[ASTROCARE] Server running on http://0.0.0.0:${PORT}`);
+  });
+}
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[ASTROCARE] Server running on http://0.0.0.0:${PORT}`);
