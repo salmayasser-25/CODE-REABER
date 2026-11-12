@@ -4,7 +4,7 @@ import {
   TrendingUp, ChefHat, Pill, Apple, Moon, Brain,
   ShieldCheck, RefreshCw, Plus, Info, Star, Clock
 } from 'lucide-react';
-import { AstronautProfile } from '../types/astronaut.ts';
+import type { AstronautProfile } from '../types/astronaut.ts';
 import type { NutrientItem, DailyNutritionLog, NutrientCategory } from '../types/nutrition.ts';
 
 interface NutriLogPageProps {
