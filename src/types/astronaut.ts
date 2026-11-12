@@ -132,6 +132,7 @@ export interface SpaceExercise {
   intensity: 'Low' | 'Moderate' | 'High';
   status: ExerciseStatus;
   warningMessage?: string; // shown when restricted
+  restrictionReason?: string;
 }
 
 export interface FitnessAIAnalysis {
@@ -141,10 +142,11 @@ export interface FitnessAIAnalysis {
   dailyPlan: string;
   cautions: string[];
   fitnessScore?: number;
+  recommendations?: string[];
   timestamp: string;
 }
 
-export type TimelineEventType = 'vitals' | 'symptom' | 'ai_insight' | 'checkin' | 'exercise_eva';
+export type TimelineEventType = 'vitals' | 'symptom' | 'ai_insight' | 'checkin' | 'exercise_eva' | 'restriction' | 'doctor_note';
 
 export interface TimelineEvent {
   id: string;
@@ -156,4 +158,169 @@ export interface TimelineEvent {
   severity?: 'nominal' | 'warning' | 'alert' | 'info';
   badge?: string;
 }
+
+export interface MedicalRestriction {
+  id: string;
+  astronautId: string;
+  astronautName: string;
+  name: string;
+  description: string;
+  affectedRegion: string;
+  restrictedExercises: string[];
+  severity: 'High' | 'Moderate' | 'Low';
+  effectiveDate: string;
+  status: 'Active' | 'Under Review' | 'Lifted';
+  prescribedBy: string;
+  clinicalRationale: string;
+}
+
+export interface DoctorNote {
+  id: string;
+  astronautId: string;
+  astronautName: string;
+  timestamp: string;
+  author: string;
+  category: 'Routine Assessment' | 'Adaptation Review' | 'Countermeasure Directive' | 'Pre-EVA Medical Clearance' | 'Clinical Anomaly';
+  title: string;
+  content: string;
+  relatedSymptoms?: string[];
+  vitalsSnapshot?: { hr: number; bp: string; spo2: number; temp: number };
+  status: 'Finalized' | 'Addendum Added' | 'Draft';
+}
+
+export interface MedicalTeamMember {
+  id: string;
+  name: string;
+  role: string;
+  location: string;
+  avatar?: string;
+  callsign?: string;
+  status: 'online' | 'busy' | 'orbital_pass' | 'standby';
+  frequency?: string;
+}
+
+export interface MedicalMessage {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: string;
+  senderAvatar?: string;
+  content: string;
+  timestamp: string;
+  isSurgeon: boolean;
+  messageType?: 'clinical_directive' | 'telemetry_alert' | 'routine' | 'clearance';
+  priority?: 'normal' | 'urgent' | 'priority';
+}
+
+export interface MedicalConversation {
+  id: string;
+  title: string;
+  isGroup: boolean;
+  description?: string;
+  participants: MedicalTeamMember[];
+  lastMessage?: string;
+  lastTimestamp?: string;
+  unreadCount: number;
+  channelFrequency?: string;
+}
+
+export interface CrewMemberSummary {
+  id: string;
+  name: string;
+  callsign: string;
+  role: string;
+  missionId: string;
+  photoUrl: string;
+  healthStatus: 'nominal' | 'monitoring' | 'critical';
+  heartRate: number;
+  bloodPressure: string;
+  spO2: number;
+  temperature: number;
+  latestSymptom?: string;
+  activeRestrictionsCount: number;
+  lastMeasurementTime: string;
+  bloodType: string;
+  spineElongation: number;
+  evaHours: number;
+}
+
+export type AlertSeverity = 'critical' | 'warning' | 'info';
+
+export interface MedicalAlert {
+  id: string;
+  astronautId: string;
+  astronautName: string;
+  astronautCallsign: string;
+  photoUrl?: string;
+  title: string;
+  description: string;
+  severity: AlertSeverity;
+  category: 'Biometrics' | 'Spinal Adaptation' | 'Symptom' | 'Restriction' | 'Sleep & Recovery';
+  timestamp: string;
+  isAcknowledged: boolean;
+  reviewedBy?: string;
+  recommendedAction: string;
+}
+
+export interface ReportReviewResponse {
+  id: string;
+  reviewerId: string;
+  reviewerName: string;
+  reviewerRole: string;
+  timestamp: string;
+  action: 'endorsed' | 'countermeasure_requested' | 'forwarded' | 'cleared';
+  feedbackNotes: string;
+  recommendedModifications?: string[];
+  signatureCredential: string;
+}
+
+export interface ExchangedReportAttachment {
+  name: string;
+  sizeKb: number;
+  type: 'pdf' | 'ultrasound_dicom' | 'telemetry_csv' | 'scan_img';
+}
+
+export interface ForwardHistoryEntry {
+  fromDoctor: string;
+  toDoctor: string;
+  reason: string;
+  timestamp: string;
+}
+
+export interface ExchangedMedicalReport {
+  id: string;
+  reportNumber: string;
+  title: string;
+  documentType: 'Clinical Specialist Referral' | 'Spine Ultrasonic Analysis' | 'Cardiovascular Stress Panel' | 'Pre-EVA Mission Clearance' | 'Microgravity Adaptation Audit' | 'Blood Biomarker Lab';
+  astronautId: string;
+  astronautName: string;
+  astronautCallsign: string;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  recipientDoctorId: string;
+  recipientDoctorName: string;
+  recipientDoctorRole: string;
+  urgency: 'routine' | 'urgent' | 'critical_stat';
+  status: 'draft' | 'transmitted' | 'under_review' | 'reviewed' | 'forwarded';
+  createdAt: string;
+  transmissionTimestamp: string;
+  clinicalSummary: string;
+  findings: string[];
+  referralQuestion: string;
+  vitalsSnapshot?: {
+    hr: number;
+    bp: string;
+    spo2: number;
+    temp: number;
+    spineDelta?: string;
+  };
+  attachments?: ExchangedReportAttachment[];
+  reviews: ReportReviewResponse[];
+  forwardHistory?: ForwardHistoryEntry[];
+}
+
+
+
 
