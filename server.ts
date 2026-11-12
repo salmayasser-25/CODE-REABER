@@ -1,7 +1,9 @@
+import 'dotenv/config';
 import express from 'express';
 import type { Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import Groq from 'groq-sdk';
 import { UpdateProfileSchema } from './src/types/astronaut.ts';
 import { 
   getProfile, 
@@ -21,12 +23,57 @@ const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const isProd = process.env.NODE_ENV === 'production';
 
+// Initialize Groq AI Client (Primary fast & generous chat provider)
+let cachedGroqModel: string | null = null;
+let lastGroqModelCheck = 0;
+
+function getGroqClient(): Groq | null {
+  const key = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY || '';
+  if (!key) return null;
+  return new Groq({ apiKey: key });
+}
+
+async function resolveGroqModel(groq: Groq): Promise<string> {
+  const now = Date.now();
+  if (cachedGroqModel && now - lastGroqModelCheck < 1000 * 60 * 30) {
+    return cachedGroqModel;
+  }
+  try {
+    const list = await groq.models.list();
+    const availableIds = list.data.map((m: any) => m.id);
+    const candidatePreferences = [
+      'llama-3.3-70b-versatile',
+      'llama-3.1-8b-instant',
+      'qwen/qwen3.8-27b',
+      'openai/gpt-oss-20b',
+      'openai/gpt-oss-120b',
+      'allam-2-7b',
+    ];
+    const match = candidatePreferences.find((id) => availableIds.includes(id));
+    if (match) {
+      cachedGroqModel = match;
+      lastGroqModelCheck = now;
+      return match;
+    }
+    const fallbackTextModel = availableIds.find((id) => !id.includes('whisper') && !id.includes('guard'));
+    if (fallbackTextModel) {
+      cachedGroqModel = fallbackTextModel;
+      lastGroqModelCheck = now;
+      return fallbackTextModel;
+    }
+  } catch (err: any) {
+    console.warn('[Groq Model Discovery Warning]:', err?.message);
+  }
+  return 'qwen/qwen3.8-27b';
+}
+
+
 // Initialize Gemini SDK with User-Agent header telemetry
-const geminiApiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
-let genAI: GoogleGenAI | null = null;
-if (geminiApiKey) {
-  genAI = new GoogleGenAI({
-    apiKey: geminiApiKey,
+function getGeminiClient(): GoogleGenAI | null {
+  const key = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+  if (!key) return null;
+  return new GoogleGenAI({
+    apiKey: key,
     httpOptions: {
       headers: {
         'User-Agent': 'aistudio-build',
@@ -34,6 +81,8 @@ if (geminiApiKey) {
     },
   });
 }
+
+
 
 // Support JSON payloads including base64 image previews
 app.use(express.json({ limit: '15mb' }));
@@ -53,10 +102,14 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.json({
     status: 'online',
     system: 'ASTROCARE Health Intelligence Core',
-    geminiEnabled: Boolean(geminiApiKey),
+    groqEnabled: Boolean(getGroqClient()),
+    openRouterEnabled: Boolean(process.env.OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_API_KEY),
+    geminiEnabled: Boolean(getGeminiClient()),
     timestamp: new Date().toISOString(),
   });
 });
+
+
 
 // GET /api/profile — Fetch astronaut profile
 app.get('/api/profile', (_req: Request, res: Response) => {
@@ -282,7 +335,8 @@ app.post('/api/ai/insight', async (req: Request, res: Response) => {
     const baselineHr = profile?.restingHeartRate ?? 58;
     const spineDelta = profile?.spineElongation ?? 4.2;
 
-    if (genAI) {
+    const ai = getGeminiClient();
+    if (ai) {
       try {
         const prompt = `You are the NASA Flight Surgeon Clinical Co-Pilot aboard the ISS / Artemis Expedition 74.
 Analyze the following astronaut bio-telemetry:
@@ -297,11 +351,11 @@ Generate exactly 2 to 3 sentences of concise, actionable clinical insight.
 Highlight the correlation between elevated heart rate and the reduced ${sleep} hours of sleep, and advise on hydration or rest. Professional flight medicine tone.`;
 
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('AI request timeout')), 4500)
+          setTimeout(() => reject(new Error('AI request timeout')), 5000)
         );
 
         const response: any = await Promise.race([
-          genAI.models.generateContent({
+          ai.models.generateContent({
             model: 'gemini-3.8-flash',
             contents: prompt,
           }),
@@ -344,31 +398,144 @@ Highlight the correlation between elevated heart rate and the reduced ${sleep} h
   }
 });
 
-// POST /api/ai/chat — Gemini Mental Health Companion (ASTRO)
-app.post('/api/ai/chat', async (req: Request, res: Response) => {
+// POST /api/chat/astro & /api/ai/chat — Mental Health Companion (ASTRO) via Groq / OpenRouter
+const handleAstroChat = async (req: Request, res: Response) => {
   try {
-    const { message } = req.body;
-    if (!message) {
+    const { message, history } = req.body;
+    if (!message || typeof message !== 'string' || !message.trim()) {
       return res.status(400).json({ success: false, error: 'Message is required' });
     }
 
-    const systemPrompt = `You are ASTRO, a compassionate mental health companion for astronauts. You are empathetic, a good listener, and you use cognitive behavioral techniques to help the astronaut manage isolation and stress. Keep responses short and supportive (2-3 sentences max).`;
+    const trimmedMessage = message.trim();
+    const systemPrompt = "You are ASTRO, a compassionate mental health companion for astronauts. You are empathetic, a good listener, and you use cognitive behavioral techniques to help the astronaut manage isolation and stress. Keep responses short, supportive, and non-diagnostic. Do not give medical advice.";
 
-    if (genAI) {
+    // Format OpenAI / Groq compatible messages array
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: systemPrompt },
+    ];
+
+    if (Array.isArray(history) && history.length > 0) {
+      const recentHistory = history.slice(-8);
+      for (const item of recentHistory) {
+        if (item && item.content && typeof item.content === 'string' && item.content.trim()) {
+          const role = item.role === 'assistant' ? 'assistant' : 'user';
+          messages.push({
+            role,
+            content: item.content.trim(),
+          });
+        }
+      }
+    }
+
+    // Append current user message
+    messages.push({
+      role: 'user',
+      content: trimmedMessage,
+    });
+
+    // 1. Primary Provider: Groq (Auto-discovered active model with fast fallbacks)
+    const groq = getGroqClient();
+    if (groq) {
+      const activeModel = await resolveGroqModel(groq);
+      const groqCandidateModels = Array.from(new Set([
+        activeModel,
+        'qwen/qwen3.8-27b',
+        'openai/gpt-oss-20b',
+        'openai/gpt-oss-120b',
+        'llama-3.3-70b-versatile',
+        'llama-3.1-8b-instant',
+      ]));
+
+      for (const modelId of groqCandidateModels) {
+        try {
+          const completion = await groq.chat.completions.create({
+            messages,
+            model: modelId,
+            max_tokens: 380,
+            temperature: 0.7,
+          });
+          const reply = completion.choices[0]?.message?.content?.trim();
+          if (reply) {
+            cachedGroqModel = modelId;
+            return res.json({
+              success: true,
+              reply,
+              source: `groq/${modelId}`,
+            });
+          }
+        } catch (groqError: any) {
+          if (groqError?.status === 404 || groqError?.message?.includes('not exist')) {
+            continue;
+          }
+          console.warn(`[Groq Error with ${modelId}]:`, groqError?.message);
+        }
+      }
+    }
+
+    // 2. Secondary Fallback: OpenRouter (openrouter/free or gemma-4)
+    const openRouterKey = process.env.OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_API_KEY;
+    if (openRouterKey) {
+      const orCandidates = ['openrouter/free', 'google/gemma-4-31b-it:free', 'deepseek/deepseek-chat:free'];
+      for (const orModel of orCandidates) {
+        try {
+          const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openRouterKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://astrocare.internal',
+              'X-Title': 'ASTROCARE Health Intelligence',
+            },
+            body: JSON.stringify({
+              model: orModel,
+              messages,
+              max_tokens: 350,
+            }),
+          });
+          if (orRes.ok) {
+            const orData = await orRes.json();
+            const choice = orData.choices?.[0];
+            const reply = choice?.message?.content?.trim() || choice?.message?.reasoning?.trim();
+            if (reply) {
+              return res.json({
+                success: true,
+                reply,
+                source: `openrouter/${orModel}`,
+              });
+            }
+          }
+        } catch (orError: any) {
+          console.warn(`[OpenRouter ${orModel} Error]:`, orError?.message);
+        }
+      }
+    }
+
+    // 3. Tertiary Fallback: Gemini (if key exists)
+    const gemini = getGeminiClient();
+    if (gemini) {
       try {
-        const prompt = `${systemPrompt}\n\nAstronaut: ${message}\nASTRO:`;
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('AI chat timeout')), 4500)
-        );
+        const geminiContents = messages
+          .filter((m) => m.role !== 'system')
+          .map((m) => ({
+            role: (m.role === 'assistant' ? 'model' : 'user') as 'model' | 'user',
+            parts: [{ text: m.content }],
+          }));
+
+        while (geminiContents.length > 0 && geminiContents[0].role === 'model') {
+          geminiContents.shift();
+        }
+        if (geminiContents.length === 0) {
+          geminiContents.push({ role: 'user', parts: [{ text: trimmedMessage }] });
+        }
 
         const response: any = await Promise.race([
-          genAI.models.generateContent({
+          gemini.models.generateContent({
             model: 'gemini-3.8-flash',
-            contents: prompt,
+            contents: geminiContents,
+            config: { systemInstruction: systemPrompt },
           }),
-          timeoutPromise,
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('AI request timeout')), 5000)),
         ]);
-
         const text = response.text?.trim();
         if (text) {
           return res.json({
@@ -378,32 +545,40 @@ app.post('/api/ai/chat', async (req: Request, res: Response) => {
           });
         }
       } catch (geminiError: any) {
-        console.warn('[Gemini AI Chat] Falling back to ASTRO empathetic matrix:', geminiError?.message);
+        console.warn('[Gemini Fallback Error]:', geminiError?.message);
       }
     }
 
-    // Compassionate ASTRO mental companion fallback
-    const lower = message.toLowerCase();
-    let reply = "I'm right here with you in the quiet of orbit. Take a slow, deep breath. You are doing extraordinary work 400 kilometers above Earth, and it's completely normal to feel the weight of this mission.";
-    if (lower.includes('homesick') || lower.includes('home') || lower.includes('family') || lower.includes('miss')) {
-      reply = "Longing for home is a natural reminder of how deeply connected you are to the people you love down on Earth. Every completed orbit brings you closer to reunion. Let's look out the cupola together and breathe through this moment.";
-    } else if (lower.includes('sleep') || lower.includes('tired') || lower.includes('insomnia') || lower.includes('exhaust')) {
-      reply = "Sleep in microgravity without natural day-night cues can be demanding on your body clock. Let's dim the cabin lights, practice the box breathing guide, and allow your muscles to decompress.";
+    // 4. Resilient Aerospace CBT Mental Health Engine (Guarantees zero downtime)
+    const lower = trimmedMessage.toLowerCase();
+    let localReply = "I'm right here with you, Dr. Salma. Operating in microgravity aboard Expedition 74 places unique psychological demands on every crew member. Let's take a calm, grounding breath. What are you feeling most in your cabin right now?";
+
+    if (lower.includes('sleep') || lower.includes('tired') || lower.includes('insomnia') || lower.includes('wake') || lower.includes('rest')) {
+      localReply = "Sleep architecture often fragments in LEO due to 16 daily orbital sunsets and microgravity fluid shifts. I recommend activating our 4-4-4-4 Box Breathing exercise and setting cabin light levels to warm 2700K.";
+    } else if (lower.includes('homesick') || lower.includes('home') || lower.includes('family') || lower.includes('earth') || lower.includes('miss')) {
+      localReply = "Watching Earth from the station window while feeling so distant from family is a known psychological effect in long-duration missions. Your emotions are completely valid. We can schedule a private family audio uplink during the next ground pass.";
     } else if (lower.includes('stress') || lower.includes('anxious') || lower.includes('anxiety') || lower.includes('overwhelm') || lower.includes('panic')) {
-      reply = "Let's pause right here together and step back from mission telemetry. Inhale for four seconds, hold for four, and gently release. You have overcome challenging situations before, and we will take this one moment at a time.";
-    } else if (lower.includes('breath') || lower.includes('relax') || lower.includes('calm')) {
-      reply = "Follow the guided breathing circle on your display. Breathe in slowly through your nose, hold stillness in your chest, and let go of all tension with each exhale. You are safe and grounded.";
+      localReply = "When physiological stress peaks, let's anchor into the physical body. Drop your shoulders away from your ears, relax your jaw, and notice the ambient ventilation hum. We'll take this mission one timeline block at a time.";
+    } else if (lower.includes('grounding') || lower.includes('breath') || lower.includes('mindful') || lower.includes('calm')) {
+      localReply = "Let's do a quick microgravity sensory check: Notice the secure touch of your foot restraints, feel the fresh airflow from the ECLSS vent, and take four slow seconds to inhale, then four seconds to exhale. You are in control.";
     }
 
-    res.json({
+    return res.json({
       success: true,
-      reply,
-      source: 'astro-empathetic-core',
+      reply: localReply,
+      source: 'astro-companion-resilience-core',
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, error: 'Connection to ASTRO lost. Please try again.' });
+    console.error('[ASTRO Chat Server Error]:', error?.message);
+    res.status(500).json({
+      success: false,
+      error: 'ASTRO is currently unavailable. Please try again later.',
+    });
   }
-});
+};
+
+app.post('/api/chat/astro', handleAstroChat);
+app.post('/api/ai/chat', handleAstroChat);
 
 
 // Mount Vite or static server

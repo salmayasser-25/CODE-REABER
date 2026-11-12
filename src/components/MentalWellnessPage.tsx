@@ -362,7 +362,7 @@ export const MentalWellnessPage: React.FC<MentalWellnessPageProps> = ({ profile 
     {
       id: 'msg-init',
       role: 'assistant',
-      content: `Hello Dr. Salma. I'm ASTRO, your dedicated clinical mental wellness companion for Expedition 74. We are 84 days into your mission. How are you feeling in the quiet of the station today?`,
+      content: `Hello Dr. Salma. I'm ASTRO, your dedicated clinical mental health companion for Expedition 74. We are 84 days into your mission. How are you feeling in the quiet of the station today?`,
       timestamp: new Date().toISOString(),
     },
   ]);
@@ -370,67 +370,140 @@ export const MentalWellnessPage: React.FC<MentalWellnessPageProps> = ({ profile 
   const [isSending, setIsSending] = useState<boolean>(false);
   const [isListening, setIsListening] = useState<boolean>(false);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState<boolean>(true);
+  const [hasSpeechRecognition, setHasSpeechRecognition] = useState<boolean>(false);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
+  const recognitionRef = useRef<any>(null);
 
-  // Auto-scroll chat
+  // Check Web Speech API SpeechRecognition availability on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      setHasSpeechRecognition(Boolean(SpeechRec));
+    }
+  }, []);
+
+  // Cleanup speech synthesis and recognition on unmount
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+      }
+    };
+  }, []);
+
+  // Auto-scroll chat on new messages or thinking state
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isSending]);
 
-  // Voice speech synthesis
+  // Voice speech synthesis (Text-to-Speech)
   const speakMessage = (text: string) => {
     if (!isVoiceEnabled || !('speechSynthesis' in window)) return;
     try {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.pitch = 1.05;
-      utterance.rate = 0.95;
+      utterance.rate = 0.95; // Gentle, empathetic cadence
       window.speechSynthesis.speak(utterance);
     } catch {
       // SpeechSynthesis error catch
     }
   };
 
-  // Web Speech API Microphone Dictation
-  const toggleListening = () => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('Speech recognition is not supported in this browser. You can type your thoughts below.');
-      return;
-    }
+  // Toggle Voice Output ON/OFF
+  const handleToggleVoice = () => {
+    setIsVoiceEnabled((prev) => {
+      const next = !prev;
+      if (!next && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      return next;
+    });
+  };
 
-    if (isListening) {
-      setIsListening(false);
-      return;
-    }
+  // Web Speech API Microphone Dictation (Speech-to-Text)
+  const startListening = () => {
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) return;
 
     try {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch {}
+      }
+
+      const recognition = new SpeechRec();
       recognition.continuous = false;
-      recognition.interimResults = false;
+      recognition.interimResults = true;
       recognition.lang = 'en-US';
 
-      recognition.onstart = () => setIsListening(true);
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
       recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        if (transcript) {
-          setInputMessage(transcript);
-          handleSendMessage(transcript);
+        let interim = '';
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interim += event.results[i][0].transcript;
+          }
+        }
+        const text = (finalTranscript || interim).trim();
+        if (text) {
+          setInputMessage(text);
         }
       };
-      recognition.onerror = () => setIsListening(false);
-      recognition.onend = () => setIsListening(false);
 
+      recognition.onerror = (e: any) => {
+        console.warn('SpeechRecognition error:', e);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
       recognition.start();
-    } catch {
+    } catch (err) {
+      console.warn('Failed to start speech recognition:', err);
       setIsListening(false);
     }
   };
 
-  // Send message to Gemini ASTRO backend proxy
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+    }
+    setIsListening(false);
+  };
+
+  const toggleListening = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
+
+  // Send message to Gemini ASTRO backend API route
   const handleSendMessage = async (textToSend?: string) => {
     const text = (textToSend || inputMessage).trim();
     if (!text || isSending) return;
+
+    // Stop listening if user hits send while mic was on
+    if (isListening) {
+      stopListening();
+    }
 
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -443,11 +516,20 @@ export const MentalWellnessPage: React.FC<MentalWellnessPageProps> = ({ profile 
     setInputMessage('');
     setIsSending(true);
 
+    // Format chat history for multi-turn Gemini context
+    const historyPayload = messages.slice(-8).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
     try {
-      const res = await fetch('/api/ai/chat', {
+      const res = await fetch('/api/chat/astro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ 
+          message: text,
+          history: historyPayload,
+        }),
       });
 
       const json = await res.json();
@@ -458,15 +540,14 @@ export const MentalWellnessPage: React.FC<MentalWellnessPageProps> = ({ profile 
           content: json.reply,
           timestamp: new Date().toISOString(),
         };
+        // Display AI response text in chat bubble at the same time it is spoken
         setMessages((prev) => [...prev, assistantMsg]);
         speakMessage(json.reply);
         return;
       }
-      throw new Error(json.error || 'Connection to ASTRO lost. Please try again.');
+      throw new Error(json.error || 'ASTRO is currently unavailable. Please try again later.');
     } catch (err: any) {
-      const errorMsg = err?.message?.includes('Connection to ASTRO') 
-        ? err.message 
-        : 'Connection to ASTRO lost. Please try again.';
+      const errorMsg = 'ASTRO is currently unavailable. Please try again later.';
       setMessages((prev) => [
         ...prev,
         {
@@ -512,16 +593,18 @@ export const MentalWellnessPage: React.FC<MentalWellnessPageProps> = ({ profile 
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Voice ON/OFF Toggle (Web Speech API Text-to-Speech) */}
           <button
-            onClick={() => setIsVoiceEnabled((prev) => !prev)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all ${
+            type="button"
+            onClick={handleToggleVoice}
+            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
               isVoiceEnabled
-                ? 'bg-purple-600 text-white shadow-[0_0_15px_#9333ea]'
-                : 'bg-slate-900 text-slate-400 border border-slate-700'
+                ? 'bg-purple-600 text-white shadow-[0_0_18px_#9333ea]'
+                : 'bg-slate-900 text-slate-400 border border-slate-700 hover:text-white'
             }`}
-            title="Toggle ASTRO Voice Output"
+            title="Toggle ASTRO Voice Output (Web Speech API)"
           >
-            {isVoiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            {isVoiceEnabled ? <Volume2 className="w-4 h-4 text-white" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
             <span>VOICE {isVoiceEnabled ? 'ON' : 'OFF'}</span>
           </button>
         </div>
@@ -541,7 +624,7 @@ export const MentalWellnessPage: React.FC<MentalWellnessPageProps> = ({ profile 
         {/* Right Column (7 Cols): AI Chat Interface (Gemini Live / Speech) */}
         <div className="lg:col-span-7 flex flex-col h-[650px] glass-panel glass-panel-glow-purple rounded-2xl border border-purple-500/40 shadow-[0_0_35px_rgba(168,85,247,0.22)] overflow-hidden bg-[#0d0920]/90">
           {/* Chat Header */}
-          <div className="p-4 sm:p-5 border-b border-purple-900/60 bg-[#130b2c]/80 flex items-center justify-between">
+          <div className="p-4 sm:p-5 border-b border-purple-900/60 bg-[#130b2c]/80 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3">
               <div className="relative">
                 <div className="w-10 h-10 rounded-xl bg-purple-600/30 border border-purple-400/60 flex items-center justify-center text-purple-200 font-bold font-mono">
@@ -555,49 +638,54 @@ export const MentalWellnessPage: React.FC<MentalWellnessPageProps> = ({ profile 
                     ASTRO Mental Companion
                   </h3>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-500/40">
-                    GEMINI LIVE PROTOCOL
+                    GROQ AI ONLINE
                   </span>
+
+
                 </div>
                 <div className="text-xs text-purple-200 font-sans">
-                  End-to-End Encrypted Crew Cabin Channel · CBT & Stress Mitigation
+                  Encrypted Astronaut Cabin Channel · Empathetic CBT & Stress Support
                 </div>
               </div>
             </div>
 
             <button
               onClick={() => {
+                if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                  window.speechSynthesis.cancel();
+                }
                 setMessages([
                   {
                     id: 'msg-reset',
                     role: 'assistant',
-                    content: `Channel refreshed, Dr. Salma. I am here whenever you're ready to talk.`,
+                    content: `Channel refreshed, Dr. Salma. I am right here whenever you'd like to share what's on your mind.`,
                     timestamp: new Date().toISOString(),
                   },
                 ]);
               }}
               title="Reset conversation"
-              className="p-2 rounded-lg bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border border-purple-800 transition-colors"
+              className="p-2 rounded-lg bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border border-purple-800 transition-colors cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
             </button>
           </div>
 
           {/* Quick Prompts Strip */}
-          <div className="px-4 py-2 bg-purple-950/40 border-b border-purple-900/40 flex items-center gap-2 overflow-x-auto text-xs font-mono">
+          <div className="px-4 py-2 bg-purple-950/40 border-b border-purple-900/40 flex items-center gap-2 overflow-x-auto text-xs font-mono shrink-0">
             <span className="text-purple-400 font-bold shrink-0">STARTERS:</span>
             {quickPrompts.map((q, idx) => (
               <button
                 key={idx}
                 onClick={() => handleSendMessage(q)}
                 disabled={isSending}
-                className="px-2.5 py-1 rounded bg-purple-900/40 hover:bg-purple-800/60 border border-purple-700/60 text-purple-200 shrink-0 transition-colors text-[11px]"
+                className="px-2.5 py-1 rounded bg-purple-900/40 hover:bg-purple-800/60 border border-purple-700/60 text-purple-200 shrink-0 transition-colors text-[11px] cursor-pointer"
               >
                 {q}
               </button>
             ))}
           </div>
 
-          {/* Messages Stream */}
+          {/* Messages Stream - Scrollable */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
             {messages.map((msg) => {
               const isUser = msg.role === 'user';
@@ -636,21 +724,45 @@ export const MentalWellnessPage: React.FC<MentalWellnessPageProps> = ({ profile 
               );
             })}
 
+            {/* Thinking... Indicator (Typing dots) */}
             {isSending && (
-              <div className="flex items-center gap-3 text-purple-300 font-mono text-xs">
-                <div className="w-8 h-8 rounded-lg bg-purple-600/50 flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-purple-200 animate-spin" />
+              <div className="flex items-start gap-3 flex-row animate-in fade-in duration-200">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center font-mono text-xs font-bold shrink-0 bg-purple-600 text-white shadow-[0_0_12px_#9333ea]">
+                  AI
                 </div>
-                <div className="p-3 rounded-xl bg-purple-950/60 border border-purple-800/80 animate-pulse">
-                  ASTRO is synthesizing supportive reflection...
+                <div className="p-3.5 px-4 rounded-2xl bg-purple-950/70 border border-purple-500/40 text-purple-200 rounded-tl-none shadow-[0_0_18px_rgba(168,85,247,0.15)] flex items-center gap-3">
+                  <div className="flex items-center gap-1.5 py-0.5">
+                    <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce [animation-delay:-0.3s]" />
+                    <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce [animation-delay:-0.15s]" />
+                    <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" />
+                  </div>
+                  <span className="text-xs font-mono text-purple-200 tracking-wide">ASTRO is thinking...</span>
                 </div>
               </div>
             )}
             <div ref={chatBottomRef} />
           </div>
 
-          {/* Chat Input Bar */}
-          <div className="p-4 border-t border-purple-900/60 bg-[#130b2c]/90">
+          {/* Active Voice Listening Status Strip */}
+          {isListening && (
+            <div className="px-4 py-2 bg-rose-950/80 border-t border-rose-500/50 flex items-center justify-between text-xs font-mono text-rose-200 shrink-0 animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+                <span className="font-bold">LISTENING VIA MICROPHONE...</span>
+                <span className="text-rose-300 text-[11px] hidden sm:inline">Speak naturally into your device</span>
+              </div>
+              <button
+                type="button"
+                onClick={stopListening}
+                className="px-2 py-0.5 rounded bg-rose-900/60 hover:bg-rose-800 text-white font-bold text-[10px] border border-rose-400/50"
+              >
+                DONE SPEAKING
+              </button>
+            </div>
+          )}
+
+          {/* Chat Input Bar - Fixed at Bottom */}
+          <div className="p-4 border-t border-purple-900/60 bg-[#130b2c]/90 shrink-0">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -658,19 +770,28 @@ export const MentalWellnessPage: React.FC<MentalWellnessPageProps> = ({ profile 
               }}
               className="flex items-center gap-2.5"
             >
-              {/* Mic Speech-to-Text Button */}
-              <button
-                type="button"
-                onClick={toggleListening}
-                className={`p-3 rounded-xl border transition-all ${
-                  isListening
-                    ? 'bg-rose-500 text-white border-rose-400 animate-pulse shadow-[0_0_20px_#f43f5e]'
-                    : 'bg-purple-900/40 text-purple-200 border-purple-600/50 hover:bg-purple-800/50'
-                }`}
-                title={isListening ? 'Listening... click to stop' : 'Click to speak via Web Speech API'}
-              >
-                {isListening ? <MicOff className="w-5 h-5 text-white" /> : <Mic className="w-5 h-5" />}
-              </button>
+              {/* Mic Speech-to-Text Button OR Fallback Note */}
+              {hasSpeechRecognition ? (
+                <button
+                  type="button"
+                  onClick={toggleListening}
+                  className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                    isListening
+                      ? 'bg-rose-600 text-white border-rose-400 animate-pulse ring-4 ring-rose-500/50 shadow-[0_0_25px_#f43f5e]'
+                      : 'bg-purple-900/40 text-purple-200 border-purple-600/50 hover:bg-purple-800/50'
+                  }`}
+                  title={isListening ? 'Listening... click to stop' : 'Click to speak via microphone (Speech-to-Text)'}
+                >
+                  {isListening ? <MicOff className="w-5 h-5 text-white" /> : <Mic className="w-5 h-5" />}
+                </button>
+              ) : (
+                <div
+                  className="p-2.5 rounded-xl bg-purple-950/60 border border-purple-800/60 text-purple-400 text-[11px] font-mono hidden sm:flex items-center"
+                  title="Voice input is not supported in this browser."
+                >
+                  Voice input is not supported in this browser.
+                </div>
+              )}
 
               <input
                 type="text"
@@ -684,7 +805,7 @@ export const MentalWellnessPage: React.FC<MentalWellnessPageProps> = ({ profile 
               <button
                 type="submit"
                 disabled={!inputMessage.trim() || isSending}
-                className="px-5 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-mono font-bold text-sm flex items-center gap-1.5 transition-all shadow-[0_0_20px_rgba(168,85,247,0.4)] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-5 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-mono font-bold text-sm flex items-center gap-1.5 transition-all shadow-[0_0_20px_rgba(168,85,247,0.4)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 <Send className="w-4 h-4" />
                 <span className="hidden sm:inline">SEND</span>
