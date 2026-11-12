@@ -7,7 +7,8 @@ import {
   Orbit,
   Heart,
   ClipboardCheck,
-  Clock
+  Clock,
+  Dumbbell
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -58,6 +59,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       sublabel: 'Hologram Symptom Mapping',
       icon: Stethoscope,
       phase: '3D Sensor Map',
+    },
+    {
+      id: 'fitness',
+      label: 'Fitness & Workout',
+      sublabel: 'Exercise Rx & AI Guard',
+      icon: Dumbbell,
+      phase: 'Countermeasures',
     },
     {
       id: 'timeline',

@@ -79,6 +79,7 @@ export const TopNav: React.FC<TopNavProps> = ({
             { id: 'checkin', label: 'Daily Check-in' },
             { id: 'mental', label: 'Mental Wellness' },
             { id: 'body3d', label: '3D Body Map' },
+            { id: 'fitness', label: 'Fitness & Workout' },
             { id: 'timeline', label: 'Medical Timeline' },
           ].map((tab) => {
             const active = currentTab === tab.id;

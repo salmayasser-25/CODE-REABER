@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import Groq from 'groq-sdk';
 import { UpdateProfileSchema } from './src/types/astronaut.ts';
+import type { ExerciseCategory, FitnessAIAnalysis } from './src/types/astronaut.ts';
 import { 
   getProfile, 
   updateProfile,
@@ -17,6 +18,9 @@ import {
   getCheckIns,
   addCheckIn,
   getTimelineEvents,
+  getExercises,
+  getExercisesByCategory,
+  evaluateExercisesForAstronaut,
 } from './src/server/mockDb.ts';
 
 const app = express();
@@ -579,6 +583,298 @@ const handleAstroChat = async (req: Request, res: Response) => {
 
 app.post('/api/chat/astro', handleAstroChat);
 app.post('/api/ai/chat', handleAstroChat);
+
+
+// ─── Fitness / Exercise Endpoints ───────────────────────────────────────────
+
+// GET /api/fitness/exercises — All exercises evaluated against current astronaut profile
+app.get('/api/fitness/exercises', (_req: Request, res: Response) => {
+  try {
+    const { exercises, restricted } = evaluateExercisesForAstronaut();
+    res.json({ success: true, data: exercises, restricted });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch exercises' });
+  }
+});
+
+// GET /api/fitness/exercises/:category — Exercises filtered by category
+app.get('/api/fitness/exercises/:category', (req: Request, res: Response) => {
+  try {
+    const rawCategory = req.params.category;
+    const validCategories: ExerciseCategory[] = ['Upper Body', 'Lower Body', 'Core', 'Full Body'];
+    // Accept URL-friendly formats: "Upper%20Body", "upper-body", "Upper Body"
+    const normalized = decodeURIComponent(rawCategory).replace(/-/g, ' ');
+    const matched = validCategories.find(
+      (c) => c.toLowerCase() === normalized.toLowerCase()
+    );
+
+    if (!matched) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid category "${rawCategory}". Valid categories: ${validCategories.join(', ')}`,
+      });
+    }
+
+    // Evaluate against astronaut profile then filter by category
+    const { exercises, restricted } = evaluateExercisesForAstronaut();
+    const filtered = exercises.filter((e) => e.category === matched);
+    const filteredRestricted = restricted.filter((r) =>
+      filtered.some((e) => e.id === r.exerciseId)
+    );
+
+    res.json({ success: true, data: filtered, restricted: filteredRestricted });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch exercises by category' });
+  }
+});
+
+// POST /api/fitness/ai-analysis — Gemini AI fitness analysis for current astronaut
+app.post('/api/fitness/ai-analysis', async (req: Request, res: Response) => {
+  try {
+    const profile = getProfile();
+    const vitals = getVitals();
+    const symptoms = getSymptoms();
+    const { exercises, restricted } = evaluateExercisesForAstronaut();
+
+    const ai = getGeminiClient();
+    if (ai) {
+      try {
+        const prompt = `You are the NASA Flight Surgeon Exercise Physiology Co-Pilot aboard Expedition 74.
+
+ASTRONAUT PROFILE:
+- Name: ${profile.name}
+- Age: ${profile.age}
+- Role: ${profile.role}
+- Mission Elapsed Days: ${profile.missionElapsedDays}
+- Health Status: ${profile.healthStatus}
+- Height: ${profile.heightCm} cm, Weight: ${profile.weightKg} kg
+- Spine Elongation: +${profile.spineElongation} cm
+- Conditions: ${profile.conditions.join('; ')}
+- Allergies: ${profile.allergies.join(', ')}
+
+CURRENT VITALS:
+- Heart Rate: ${vitals.heartRate} bpm (baseline: ${profile.restingHeartRate} bpm)
+- Blood Pressure: ${vitals.bloodPressureSys}/${vitals.bloodPressureDia} mmHg
+- SpO2: ${vitals.spO2}%
+- Temperature: ${vitals.temperature}°C
+- Sleep: ${vitals.sleepHours} hours
+- HRV: ${vitals.hrvMs} ms
+
+ACTIVE SYMPTOMS:
+${symptoms.filter(s => s.status !== 'resolved').map(s => `- ${s.bodyPart}: ${s.painType} pain, intensity ${s.intensity}/10. ${s.notes}`).join('\n') || 'None reported'}
+
+CURRENTLY RESTRICTED EXERCISES:
+${restricted.map(r => `- ${r.exerciseId}: ${r.reason}`).join('\n') || 'None'}
+
+AVAILABLE EXERCISES (IDs):
+${exercises.filter(e => e.status !== 'restricted').map(e => `- ${e.id} (${e.name}, ${e.category}, ${e.intensity} intensity, ${e.durationMinutes} min)`).join('\n')}
+
+Based on the astronaut's complete profile, vitals, symptoms, and conditions, generate a fitness analysis as a JSON object with EXACTLY this structure (no markdown, no backticks, just raw JSON):
+{
+  "overallAssessment": "2-3 sentence overall fitness assessment for this astronaut",
+  "recommendedExercises": ["array of exercise IDs that are safe and beneficial"],
+  "restrictedExercises": [{"exerciseId": "id", "reason": "why restricted"}],
+  "dailyPlan": "A structured daily exercise plan with specific exercises, durations, and order",
+  "cautions": ["array of specific cautions based on their conditions"],
+  "timestamp": "${new Date().toISOString()}"
+}`;
+
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('AI request timeout')), 12000)
+        );
+
+        const response: any = await Promise.race([
+          ai.models.generateContent({
+            model: 'gemini-2.0-flash',
+            contents: prompt,
+          }),
+          timeoutPromise,
+        ]);
+
+        const text = response.text?.trim();
+        if (text) {
+          try {
+            // Strip markdown code fences if present
+            const cleaned = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+            const analysis: FitnessAIAnalysis = JSON.parse(cleaned);
+            return res.json({
+              success: true,
+              data: analysis,
+              source: 'gemini-2.0-flash',
+            });
+          } catch {
+            // If JSON parsing fails, return as raw assessment
+            return res.json({
+              success: true,
+              data: {
+                overallAssessment: text,
+                recommendedExercises: exercises.filter(e => e.status !== 'restricted').map(e => e.id),
+                restrictedExercises: restricted,
+                dailyPlan: 'AI-generated plan could not be parsed. See overall assessment.',
+                cautions: ['AI response was non-structured. Review overall assessment manually.'],
+                timestamp: new Date().toISOString(),
+              } as FitnessAIAnalysis,
+              source: 'gemini-2.0-flash-raw',
+            });
+          }
+        }
+      } catch (geminiError: any) {
+        console.warn('[Gemini Fitness AI] Falling back to rule engine:', geminiError?.message);
+      }
+    }
+
+    // ── Local Rule-Engine Fallback ──
+    const availableExercises = exercises.filter((e) => e.status !== 'restricted');
+    const hrDelta = vitals.heartRate - profile.restingHeartRate;
+    const isHighHR = hrDelta > 10;
+    const isPoorSleep = vitals.sleepHours < 6;
+    const hasSpinalIssue = profile.spineElongation > 3;
+
+    const cautions: string[] = [];
+    if (isHighHR) cautions.push(`Elevated resting heart rate (+${hrDelta} bpm over baseline). Avoid high-intensity exercises until HR normalizes.`);
+    if (isPoorSleep) cautions.push(`Insufficient sleep (${vitals.sleepHours}h). Prioritize low-to-moderate intensity and include recovery periods.`);
+    if (hasSpinalIssue) cautions.push(`Spinal elongation of +${profile.spineElongation} cm detected. Axial loading exercises require caution and Flight Surgeon clearance.`);
+
+    // Build recommended list: prefer low/moderate if fatigued
+    let recommended = availableExercises;
+    if (isHighHR || isPoorSleep) {
+      recommended = availableExercises.filter((e) => e.intensity !== 'High');
+    }
+
+    const dailyPlanParts: string[] = [];
+    dailyPlanParts.push('1. Warm-up: 5 min light CEVIS cycling at low resistance');
+    const picked = recommended.slice(0, 5);
+    picked.forEach((ex, i) => {
+      dailyPlanParts.push(`${i + 2}. ${ex.name} — ${ex.durationMinutes} min (${ex.intensity} intensity)`);
+    });
+    dailyPlanParts.push(`${picked.length + 2}. Cool-down: 5 min stretching and controlled breathing`);
+
+    const overallLines: string[] = [];
+    overallLines.push(`Astronaut ${profile.name} is on MET Day ${profile.missionElapsedDays} with health status: ${profile.healthStatus}.`);
+    if (restricted.length > 0) overallLines.push(`${restricted.length} exercise(s) are currently restricted due to active conditions.`);
+    if (isHighHR || isPoorSleep) overallLines.push('Reduced-intensity protocol recommended due to elevated HR and/or insufficient sleep.');
+    else overallLines.push('Standard countermeasure exercise protocol is recommended.');
+
+    const fallbackAnalysis: FitnessAIAnalysis = {
+      overallAssessment: overallLines.join(' '),
+      recommendedExercises: recommended.map((e) => e.id),
+      restrictedExercises: restricted,
+      dailyPlan: dailyPlanParts.join('\n'),
+      cautions,
+      timestamp: new Date().toISOString(),
+    };
+
+    res.json({
+      success: true,
+      data: fallbackAnalysis,
+      source: 'fitness-rule-engine',
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to generate fitness AI analysis' });
+  }
+});
+
+// POST /api/fitness/chat — Interactive chat with NASA Exercise Physiologist Agent
+app.post('/api/fitness/chat', async (req: Request, res: Response) => {
+  try {
+    const { message, history } = req.body;
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ success: false, error: 'Message is required' });
+    }
+
+    const profile = getProfile();
+    const vitals = getVitals();
+    const symptoms = getSymptoms();
+    const { exercises, restricted } = evaluateExercisesForAstronaut();
+
+    const systemPrompt = `You are Commander Vance, the NASA Lead Exercise Physiologist and Countermeasures Specialist for ISS Expedition 74.
+You are directly speaking with Astronaut ${profile.name} (Callsign: ${profile.callsign}).
+Her clinical status:
+- Microgravity Spinal Elongation: +${profile.spineElongation} cm
+- Conditions: ${profile.conditions.join(', ')}
+- Current Resting Heart Rate: ${vitals.heartRate} bpm (flight baseline: ${profile.restingHeartRate} bpm)
+- Blood Pressure: ${vitals.bloodPressureSys}/${vitals.bloodPressureDia} mmHg, SpO2: ${vitals.spO2}%, Sleep: ${vitals.sleepHours} hrs
+- Active Symptoms: ${symptoms.filter(s => s.status !== 'resolved').map(s => `${s.bodyPart} (${s.painType}, intensity ${s.intensity}/10)`).join(', ') || 'None'}
+- Currently Restricted Exercises due to safety: ${restricted.map(r => `${r.exerciseId} (${r.reason})`).join('; ')}
+- Safe Available Countermeasures: CEVIS cycling, Bench Press, Heel Raises, Core stabilization, Resistive Band circuit.
+
+Instructions:
+1. Provide concise, expert NASA aerospace exercise guidance (2 to 4 sentences).
+2. Explicitly explain why heavy axial spine compressive loads (like ARED squats/deadlifts or heavy treadmill running) are locked/dangerous if asked, noting her +${profile.spineElongation} cm disc expansion and lumbar ache.
+3. Recommend safe alternatives (e.g. CEVIS ergometer, gentle resistance bands, decompression stretches).
+4. Keep tone professional, encouraging, and authoritative in spaceflight human physiology.`;
+
+    const ai = getGeminiClient();
+    if (ai) {
+      try {
+        const contents: any[] = [];
+        if (Array.isArray(history) && history.length > 0) {
+          for (const item of history.slice(-6)) {
+            if (item && item.content) {
+              contents.push({
+                role: item.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: item.content }],
+              });
+            }
+          }
+        }
+        while (contents.length > 0 && contents[0].role === 'model') {
+          contents.shift();
+        }
+        contents.push({
+          role: 'user',
+          parts: [{ text: message.trim() }],
+        });
+
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('AI request timeout')), 8000)
+        );
+
+        const response: any = await Promise.race([
+          ai.models.generateContent({
+            model: 'gemini-2.0-flash',
+            contents,
+            config: { systemInstruction: systemPrompt },
+          }),
+          timeoutPromise,
+        ]);
+
+        const text = response.text?.trim();
+        if (text) {
+          return res.json({
+            success: true,
+            reply: text,
+            source: 'gemini-2.0-flash',
+          });
+        }
+      } catch (geminiError: any) {
+        console.warn('[Fitness Chat Gemini Error]:', geminiError?.message);
+      }
+    }
+
+    // Local Aerospace Exercise Medicine Rule Engine Fallback
+    const lower = message.toLowerCase();
+    let reply = `Astronaut ${profile.callsign}, with your current +${profile.spineElongation} cm spinal elongation and lumbar sensitivity, we must strictly preserve disc hydration and avoid heavy axial loading. Focus today on the CEVIS ergometer at 75% VO2 max and light resistance bands.`;
+
+    if (lower.includes('squat') || lower.includes('deadlift') || lower.includes('why locked') || lower.includes('restricted') || lower.includes('spine') || lower.includes('back')) {
+      reply = `ARED heavy squats and deadlifts are locked because axial compressive loads pose immediate disc herniation risk under your current +${profile.spineElongation} cm microgravity spinal elongation and active L3-L5 discomfort. Stick to unweighted core stabilization and CEVIS cycling today.`;
+    } else if (lower.includes('cardio') || lower.includes('run') || lower.includes('treadmill') || lower.includes('t2')) {
+      reply = `T2 Treadmill bungee harness loading creates repetitive shockwaves along the decompressed spinal column. CEVIS cycle ergometer is cleared and recommended today for 30 minutes to maintain cardiovascular endurance without vertebral impact.`;
+    } else if (lower.includes('tired') || lower.includes('fatigue') || lower.includes('sleep') || lower.includes('heart')) {
+      reply = `Given your ${vitals.sleepHours}h of fragmented sleep and elevated resting heart rate (${vitals.heartRate} bpm vs ${profile.restingHeartRate} baseline), reduce workout intensity by 30%. Limit to 20 minutes on CEVIS followed by hamstring decompression stretching.`;
+    } else if (lower.includes('recommend') || lower.includes('what should i do') || lower.includes('routine') || lower.includes('today')) {
+      reply = `Today's cleared flight plan: 1) 5 min CEVIS warm-up, 2) ARED Bench Press (3 sets x 10 reps), 3) ARED Heel Raises, 4) 20 min CEVIS aerobic cycle, 5) 10 min microgravity decompression stretches. All spinal loading exercises remain locked.`;
+    }
+
+    return res.json({
+      success: true,
+      reply,
+      source: 'fitness-aerospace-matrix',
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to process chat message' });
+  }
+});
 
 
 // Mount Vite or static server

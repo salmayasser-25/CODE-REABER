@@ -14,6 +14,7 @@ import { MentalWellnessPage } from './components/MentalWellnessPage.tsx';
 import { InteractiveBodyPage } from './components/InteractiveBodyPage.tsx';
 import { DailyCheckinPage } from './components/DailyCheckinPage.tsx';
 import { UnifiedTimelinePage } from './components/UnifiedTimelinePage.tsx';
+import { FitnessPage } from './components/FitnessPage.tsx';
 import { AstronautProfile, FlightSurgeon } from './types/astronaut.js';
 import { 
   CheckCircle, 
@@ -279,7 +280,12 @@ export default function App() {
               />
             )}
 
-            {/* View 6: Astronaut Profile Page (Only ONE Profile Route) */}
+            {/* View 6: Astronaut Fitness & AI Exercise Countermeasures */}
+            {currentTab === 'fitness' && (
+              <FitnessPage profile={profile} />
+            )}
+
+            {/* View 7: Astronaut Profile Page (Only ONE Profile Route) */}
             {currentTab === 'profile' && (
               <>
                 {/* Inline Edit Mode Warning Strip */}

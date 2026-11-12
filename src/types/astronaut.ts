@@ -114,6 +114,36 @@ export interface DailyCheckIn {
   timestamp: string;
 }
 
+export type ExerciseCategory = 'Upper Body' | 'Lower Body' | 'Core' | 'Full Body';
+export type ExerciseStatus = 'available' | 'restricted' | 'recommended';
+
+export interface SpaceExercise {
+  id: string;
+  name: string;
+  description: string;
+  category: ExerciseCategory;
+  equipment: string; // e.g. 'ARED', 'CEVIS', 'T2 Treadmill', 'COLBERT', 'Resistance Bands'
+  durationMinutes: number;
+  caloriesBurned: number;
+  targetMuscles: string[];
+  contraindications: string[]; // conditions that make this exercise restricted
+  videoUrl: string; // path to local video in public/videos/
+  thumbnailUrl: string; // path to thumbnail
+  intensity: 'Low' | 'Moderate' | 'High';
+  status: ExerciseStatus;
+  warningMessage?: string; // shown when restricted
+}
+
+export interface FitnessAIAnalysis {
+  overallAssessment: string;
+  recommendedExercises: string[]; // exercise IDs
+  restrictedExercises: { exerciseId: string; reason: string }[];
+  dailyPlan: string;
+  cautions: string[];
+  fitnessScore?: number;
+  timestamp: string;
+}
+
 export type TimelineEventType = 'vitals' | 'symptom' | 'ai_insight' | 'checkin' | 'exercise_eva';
 
 export interface TimelineEvent {

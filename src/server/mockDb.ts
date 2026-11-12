@@ -4,7 +4,9 @@ import type {
   VitalsData, 
   SymptomReport, 
   DailyCheckIn, 
-  TimelineEvent 
+  TimelineEvent,
+  SpaceExercise,
+  ExerciseCategory,
 } from '../types/astronaut.ts';
 
 // Initial Mock Dataset for Dr. Salma Johnson as specified in requirements
@@ -339,4 +341,271 @@ export const deleteSymptom = (id: string): boolean => {
   const initialLength = currentSymptoms.length;
   currentSymptoms = currentSymptoms.filter((s) => s.id !== id);
   return currentSymptoms.length < initialLength;
+};
+
+// ─── Fitness / Space Exercise Data ──────────────────────────────────────────
+
+const spaceExercises: SpaceExercise[] = [
+  // ── Upper Body ──
+  {
+    id: 'ex-ared-bench-press',
+    name: 'ARED Bench Press',
+    description: 'Resistive bench press using the Advanced Resistive Exercise Device with vacuum cylinder loading up to 600 lbs.',
+    category: 'Upper Body',
+    equipment: 'ARED',
+    durationMinutes: 15,
+    caloriesBurned: 120,
+    targetMuscles: ['Pectoralis Major', 'Anterior Deltoid', 'Triceps Brachii'],
+    contraindications: ['Cephalic Fluid Shift', 'Intracranial Pressure Elevation'],
+    videoUrl: '/videos/ared-bench-press.mp4',
+    thumbnailUrl: '/videos/thumbnails/ared-bench-press.jpg',
+    intensity: 'High',
+    status: 'available',
+  },
+  {
+    id: 'ex-ared-shoulder-press',
+    name: 'ARED Shoulder Press',
+    description: 'Overhead resistive press targeting shoulder girdle stabilizers critical for EVA suit mobility.',
+    category: 'Upper Body',
+    equipment: 'ARED',
+    durationMinutes: 12,
+    caloriesBurned: 100,
+    targetMuscles: ['Deltoids', 'Trapezius', 'Triceps Brachii'],
+    contraindications: ['Spinal Elongation', 'Cervical Disc Decompression'],
+    videoUrl: '/videos/ared-shoulder-press.mp4',
+    thumbnailUrl: '/videos/thumbnails/ared-shoulder-press.jpg',
+    intensity: 'High',
+    status: 'available',
+  },
+  {
+    id: 'ex-ared-bent-over-row',
+    name: 'ARED Bent-Over Row',
+    description: 'Resistive rowing movement to counteract postural kyphosis caused by microgravity spinal unloading.',
+    category: 'Upper Body',
+    equipment: 'ARED',
+    durationMinutes: 12,
+    caloriesBurned: 95,
+    targetMuscles: ['Latissimus Dorsi', 'Rhomboids', 'Posterior Deltoid', 'Biceps Brachii'],
+    contraindications: ['Spinal Elongation', 'Lumbar Disc Herniation'],
+    videoUrl: '/videos/ared-bent-over-row.mp4',
+    thumbnailUrl: '/videos/thumbnails/ared-bent-over-row.jpg',
+    intensity: 'Moderate',
+    status: 'available',
+  },
+
+  // ── Lower Body ──
+  {
+    id: 'ex-ared-squat',
+    name: 'ARED Squat',
+    description: 'Loaded axial squat protocol to preserve lower-limb bone mineral density and counter osteopenia.',
+    category: 'Lower Body',
+    equipment: 'ARED',
+    durationMinutes: 20,
+    caloriesBurned: 180,
+    targetMuscles: ['Quadriceps', 'Gluteus Maximus', 'Hamstrings', 'Erector Spinae'],
+    contraindications: ['Spinal Elongation', 'Lumbar Disc Herniation', 'Lower Extremity Venous Congestion'],
+    videoUrl: '/videos/ared-squat.mp4',
+    thumbnailUrl: '/videos/thumbnails/ared-squat.jpg',
+    intensity: 'High',
+    status: 'available',
+  },
+  {
+    id: 'ex-ared-deadlift',
+    name: 'ARED Deadlift',
+    description: 'Resistive hip-hinge movement targeting posterior chain and axial loading for spinal bone density.',
+    category: 'Lower Body',
+    equipment: 'ARED',
+    durationMinutes: 18,
+    caloriesBurned: 170,
+    targetMuscles: ['Hamstrings', 'Gluteus Maximus', 'Erector Spinae', 'Trapezius'],
+    contraindications: ['Spinal Elongation', 'Lumbar Disc Herniation'],
+    videoUrl: '/videos/ared-deadlift.mp4',
+    thumbnailUrl: '/videos/thumbnails/ared-deadlift.jpg',
+    intensity: 'High',
+    status: 'available',
+  },
+  {
+    id: 'ex-ared-heel-raise',
+    name: 'ARED Heel Raise',
+    description: 'Calf isolation exercise under resistive load to preserve Achilles tendon and plantar bone density.',
+    category: 'Lower Body',
+    equipment: 'ARED',
+    durationMinutes: 10,
+    caloriesBurned: 60,
+    targetMuscles: ['Gastrocnemius', 'Soleus'],
+    contraindications: ['Lower Extremity Venous Congestion'],
+    videoUrl: '/videos/ared-heel-raise.mp4',
+    thumbnailUrl: '/videos/thumbnails/ared-heel-raise.jpg',
+    intensity: 'Low',
+    status: 'available',
+  },
+
+  // ── Core ──
+  {
+    id: 'ex-core-stabilization',
+    name: 'Microgravity Core Stabilization',
+    description: 'Free-floating isometric core holds and anti-rotation drills to maintain trunk control without gravity cues.',
+    category: 'Core',
+    equipment: 'None',
+    durationMinutes: 15,
+    caloriesBurned: 80,
+    targetMuscles: ['Transverse Abdominis', 'Internal Obliques', 'Multifidus'],
+    contraindications: [],
+    videoUrl: '/videos/core-stabilization.mp4',
+    thumbnailUrl: '/videos/thumbnails/core-stabilization.jpg',
+    intensity: 'Moderate',
+    status: 'available',
+  },
+  {
+    id: 'ex-ared-trunk-rotation',
+    name: 'ARED Trunk Rotation',
+    description: 'Resisted rotational movement for oblique strengthening and spinal disc hydration cycling.',
+    category: 'Core',
+    equipment: 'ARED',
+    durationMinutes: 10,
+    caloriesBurned: 70,
+    targetMuscles: ['External Obliques', 'Internal Obliques', 'Erector Spinae'],
+    contraindications: ['Spinal Elongation', 'Lumbar Disc Herniation', 'Cervical Disc Decompression'],
+    videoUrl: '/videos/ared-trunk-rotation.mp4',
+    thumbnailUrl: '/videos/thumbnails/ared-trunk-rotation.jpg',
+    intensity: 'Moderate',
+    status: 'available',
+  },
+  {
+    id: 'ex-bungee-crunch',
+    name: 'Bungee-Cord Crunch',
+    description: 'Abdominal crunch using bungee cord resistance to simulate gravitational loading on rectus abdominis.',
+    category: 'Core',
+    equipment: 'Bungee Cord System',
+    durationMinutes: 10,
+    caloriesBurned: 65,
+    targetMuscles: ['Rectus Abdominis', 'Hip Flexors'],
+    contraindications: ['Cephalic Fluid Shift', 'Intracranial Pressure Elevation'],
+    videoUrl: '/videos/bungee-crunch.mp4',
+    thumbnailUrl: '/videos/thumbnails/bungee-crunch.jpg',
+    intensity: 'Low',
+    status: 'available',
+  },
+
+  // ── Full Body ──
+  {
+    id: 'ex-cevis-cycling',
+    name: 'CEVIS Ergometer Cycling',
+    description: 'Continuous aerobic cycling on the Cycle Ergometer with Vibration Isolation System for cardiovascular conditioning.',
+    category: 'Full Body',
+    equipment: 'CEVIS',
+    durationMinutes: 30,
+    caloriesBurned: 250,
+    targetMuscles: ['Quadriceps', 'Hamstrings', 'Gastrocnemius', 'Cardiovascular System'],
+    contraindications: ['Cardiac Arrhythmia', 'Orthostatic Intolerance'],
+    videoUrl: '/videos/cevis-cycling.mp4',
+    thumbnailUrl: '/videos/thumbnails/cevis-cycling.jpg',
+    intensity: 'Moderate',
+    status: 'available',
+  },
+  {
+    id: 'ex-t2-treadmill',
+    name: 'T2 Treadmill Running',
+    description: 'Harness-loaded treadmill running on the Combined Operational Load-Bearing External Resistance Treadmill (T2/COLBERT).',
+    category: 'Full Body',
+    equipment: 'T2 Treadmill',
+    durationMinutes: 30,
+    caloriesBurned: 300,
+    targetMuscles: ['Quadriceps', 'Hamstrings', 'Calves', 'Hip Flexors', 'Cardiovascular System'],
+    contraindications: ['Spinal Elongation', 'Lower Extremity Venous Congestion', 'Orthostatic Intolerance'],
+    videoUrl: '/videos/t2-treadmill.mp4',
+    thumbnailUrl: '/videos/thumbnails/t2-treadmill.jpg',
+    intensity: 'High',
+    status: 'available',
+  },
+  {
+    id: 'ex-resistive-band-circuit',
+    name: 'Resistive Band Full-Body Circuit',
+    description: 'Portable resistance band circuit combining upper-body pulls, lower-body squats, and rotational core patterns.',
+    category: 'Full Body',
+    equipment: 'Resistance Bands',
+    durationMinutes: 25,
+    caloriesBurned: 200,
+    targetMuscles: ['Deltoids', 'Biceps', 'Quadriceps', 'Gluteus Medius', 'Core'],
+    contraindications: [],
+    videoUrl: '/videos/resistive-band-circuit.mp4',
+    thumbnailUrl: '/videos/thumbnails/resistive-band-circuit.jpg',
+    intensity: 'Moderate',
+    status: 'available',
+  },
+];
+
+export const getExercises = (): SpaceExercise[] => {
+  return spaceExercises.map((e) => ({ ...e }));
+};
+
+export const getExercisesByCategory = (category: ExerciseCategory): SpaceExercise[] => {
+  return spaceExercises.filter((e) => e.category === category).map((e) => ({ ...e }));
+};
+
+export const evaluateExercisesForAstronaut = (): {
+  exercises: SpaceExercise[];
+  restricted: { exerciseId: string; reason: string }[];
+} => {
+  const profile = getProfile();
+  const symptoms = getSymptoms();
+
+  // Collect all active condition/symptom keywords for matching
+  const activeConditionKeys: string[] = [];
+  for (const cond of profile.conditions) {
+    if (cond.toLowerCase().includes('spinal elongation')) activeConditionKeys.push('Spinal Elongation');
+    if (cond.toLowerCase().includes('cephalic fluid shift')) activeConditionKeys.push('Cephalic Fluid Shift');
+    if (cond.toLowerCase().includes('intracranial pressure')) activeConditionKeys.push('Intracranial Pressure Elevation');
+    if (cond.toLowerCase().includes('cardiac') || cond.toLowerCase().includes('arrhythmia')) activeConditionKeys.push('Cardiac Arrhythmia');
+    if (cond.toLowerCase().includes('orthostatic')) activeConditionKeys.push('Orthostatic Intolerance');
+    if (cond.toLowerCase().includes('venous congestion')) activeConditionKeys.push('Lower Extremity Venous Congestion');
+    if (cond.toLowerCase().includes('lumbar disc') || cond.toLowerCase().includes('disc herniation')) activeConditionKeys.push('Lumbar Disc Herniation');
+    if (cond.toLowerCase().includes('cervical disc')) activeConditionKeys.push('Cervical Disc Decompression');
+  }
+
+  // Also check active symptoms for relevant conditions
+  for (const sym of symptoms) {
+    if (sym.status === 'resolved') continue;
+    const lower = (sym.bodyPart + ' ' + sym.notes).toLowerCase();
+    if (lower.includes('spine') || lower.includes('lumbar') || lower.includes('elongation')) {
+      if (!activeConditionKeys.includes('Spinal Elongation')) activeConditionKeys.push('Spinal Elongation');
+    }
+    if (lower.includes('cephalic') || lower.includes('fluid shift') || lower.includes('sinus')) {
+      if (!activeConditionKeys.includes('Cephalic Fluid Shift')) activeConditionKeys.push('Cephalic Fluid Shift');
+    }
+    if (lower.includes('intracranial')) {
+      if (!activeConditionKeys.includes('Intracranial Pressure Elevation')) activeConditionKeys.push('Intracranial Pressure Elevation');
+    }
+  }
+
+  // If spine elongation > 3cm, always flag spinal elongation
+  if (profile.spineElongation > 3 && !activeConditionKeys.includes('Spinal Elongation')) {
+    activeConditionKeys.push('Spinal Elongation');
+  }
+
+  const restricted: { exerciseId: string; reason: string }[] = [];
+  const exercises: SpaceExercise[] = spaceExercises.map((ex) => {
+    const matchingContraindications = ex.contraindications.filter((ci) =>
+      activeConditionKeys.includes(ci)
+    );
+
+    if (matchingContraindications.length > 0) {
+      const reason = `Contraindicated due to: ${matchingContraindications.join(', ')}`;
+      restricted.push({ exerciseId: ex.id, reason });
+      return {
+        ...ex,
+        status: 'restricted' as const,
+        warningMessage: `⚠ ${reason}. Consult Flight Surgeon before performing this exercise.`,
+      };
+    }
+
+    // High-value safe countermeasures get recommended status
+    if (ex.id === 'ex-cevis-cycling' || ex.id === 'ex-core-stabilization' || ex.id === 'ex-ared-heel-raise') {
+      return { ...ex, status: 'recommended' as const };
+    }
+
+    return { ...ex };
+  });
+
+  return { exercises, restricted };
 };
