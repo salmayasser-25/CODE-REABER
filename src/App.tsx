@@ -14,7 +14,10 @@ import { MentalWellnessPage } from './components/MentalWellnessPage.tsx';
 import { InteractiveBodyPage } from './components/InteractiveBodyPage.tsx';
 import { DailyCheckinPage } from './components/DailyCheckinPage.tsx';
 import { UnifiedTimelinePage } from './components/UnifiedTimelinePage.tsx';
-import { FitnessPage } from './components/FitnessPage.tsx';
+import { CommsHubPage } from './components/CommsHubPage.tsx';
+import { MedicalReportsPage } from './components/MedicalReportsPage.tsx';
+import { MissionEnvironmentPage } from './components/MissionEnvironmentPage.tsx';
+import { DigitalTwinPage } from './components/DigitalTwinPage.tsx';
 import { AstronautProfile, FlightSurgeon } from './types/astronaut.js';
 import { 
   CheckCircle, 
@@ -272,7 +275,16 @@ export default function App() {
               <InteractiveBodyPage profile={profile} />
             )}
 
-            {/* View 5: Unified Medical & Telemetry Timeline */}
+            {/* View 5: Predictive Digital Twin Risk Simulator (WOW FACTOR) */}
+            {(currentTab === 'twin' || currentTab === 'digital-twin') && (
+              <DigitalTwinPage
+                profile={profile}
+                onSendToast={triggerToast}
+                onNavigateToTab={setCurrentTab}
+              />
+            )}
+
+            {/* View 6: Unified Medical & Telemetry Timeline */}
             {currentTab === 'timeline' && (
               <UnifiedTimelinePage 
                 profile={profile} 
@@ -280,12 +292,31 @@ export default function App() {
               />
             )}
 
-            {/* View 6: Astronaut Fitness & AI Exercise Countermeasures */}
-            {currentTab === 'fitness' && (
-              <FitnessPage profile={profile} />
+            {/* View 6: Community & Comms Hub (Telemedicine Uplink) */}
+            {currentTab === 'comms' && (
+              <CommsHubPage 
+                profile={profile} 
+                onSendToast={triggerToast} 
+              />
             )}
 
-            {/* View 7: Astronaut Profile Page (Only ONE Profile Route) */}
+            {/* View 7: Medical Reports & Flight Clearance Dossier */}
+            {currentTab === 'reports' && (
+              <MedicalReportsPage 
+                profile={profile} 
+                onSendToast={triggerToast} 
+              />
+            )}
+
+            {/* View 8: Spacecraft Life Support & ECLSS Telemetry (NASA DONKI) */}
+            {currentTab === 'environment' && (
+              <MissionEnvironmentPage 
+                profile={profile} 
+                onSendToast={triggerToast} 
+              />
+            )}
+
+            {/* View 9: Astronaut Profile Page (Only ONE Profile Route) */}
             {currentTab === 'profile' && (
               <>
                 {/* Inline Edit Mode Warning Strip */}
@@ -383,6 +414,7 @@ export default function App() {
                   isEditing={isEditingInline}
                   onSurgeonChange={handleSurgeonChange}
                   onSendPingToast={(msg) => triggerToast(msg, 'success')}
+                  onOpenComms={() => setCurrentTab('comms')}
                 />
               </>
             )}

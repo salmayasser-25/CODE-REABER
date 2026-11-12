@@ -7,6 +7,7 @@ interface SurgeonLinkCardProps {
   isEditing?: boolean;
   onSurgeonChange?: (field: keyof FlightSurgeon, val: string) => void;
   onSendPingToast?: (msg: string) => void;
+  onOpenComms?: () => void;
 }
 
 export const SurgeonLinkCard: React.FC<SurgeonLinkCardProps> = ({
@@ -14,6 +15,7 @@ export const SurgeonLinkCard: React.FC<SurgeonLinkCardProps> = ({
   isEditing = false,
   onSurgeonChange,
   onSendPingToast,
+  onOpenComms,
 }) => {
   const [isTransmitting, setIsTransmitting] = useState(false);
   const [lastPingTime, setLastPingTime] = useState<string | null>(null);
@@ -148,25 +150,38 @@ export const SurgeonLinkCard: React.FC<SurgeonLinkCardProps> = ({
           </div>
         </div>
 
-        {/* Primary Action Button: Send Bio-metric Ping to Surgeon */}
-        <button
-          type="button"
-          onClick={handleSendPing}
-          disabled={isTransmitting}
-          className="w-full md:w-auto px-6 py-3 rounded-xl bg-[#00E5FF] hover:bg-[#00E5FF]/90 text-black font-bold text-sm font-mono tracking-wider transition-all duration-200 flex items-center justify-center gap-2.5 shadow-[0_0_25px_rgba(0,229,255,0.45)] hover:shadow-[0_0_35px_rgba(0,229,255,0.65)] hover:-translate-y-0.5 active:translate-y-0"
-        >
-          {isTransmitting ? (
-            <>
-              <span className="w-4 h-4 rounded-full border-2 border-black border-t-transparent animate-spin" />
-              <span>TRANSMITTING ENCRYPTED TELEMETRY...</span>
-            </>
-          ) : (
-            <>
-              <Send className="w-4 h-4 text-black" />
-              <span>SEND BIO-METRIC PING TO SURGEON</span>
-            </>
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          {onOpenComms && (
+            <button
+              type="button"
+              onClick={onOpenComms}
+              className="w-full sm:w-auto px-5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-[#00E5FF]/40 text-[#00E5FF] font-bold text-sm font-mono tracking-wider transition-all duration-200 flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(0,229,255,0.2)] cursor-pointer"
+            >
+              <Radio className="w-4 h-4 text-[#00E5FF]" />
+              <span>OPEN COMMS HUB</span>
+            </button>
           )}
-        </button>
+
+          {/* Primary Action Button: Send Bio-metric Ping to Surgeon */}
+          <button
+            type="button"
+            onClick={handleSendPing}
+            disabled={isTransmitting}
+            className="w-full sm:w-auto px-6 py-3 rounded-xl bg-[#00E5FF] hover:bg-[#00E5FF]/90 text-black font-bold text-sm font-mono tracking-wider transition-all duration-200 flex items-center justify-center gap-2.5 shadow-[0_0_25px_rgba(0,229,255,0.45)] hover:shadow-[0_0_35px_rgba(0,229,255,0.65)] hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+          >
+            {isTransmitting ? (
+              <>
+                <span className="w-4 h-4 rounded-full border-2 border-black border-t-transparent animate-spin" />
+                <span>TRANSMITTING ENCRYPTED TELEMETRY...</span>
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4 text-black" />
+                <span>SEND BIO-METRIC PING TO SURGEON</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
