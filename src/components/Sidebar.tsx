@@ -8,7 +8,9 @@ import {
   Heart,
   ClipboardCheck,
   Clock,
-  Dumbbell
+  Radio,
+  FileText,
+  Gauge
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -61,11 +63,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       phase: '3D Sensor Map',
     },
     {
-      id: 'fitness',
-      label: 'Fitness & Workout',
-      sublabel: 'Exercise Rx & AI Guard',
-      icon: Dumbbell,
-      phase: 'Countermeasures',
+      id: 'twin',
+      label: 'Digital Twin Simulator',
+      sublabel: 'Biomechanical Risk Engine',
+      icon: Cpu,
+      phase: 'Risk Twin',
     },
     {
       id: 'timeline',
@@ -73,6 +75,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
       sublabel: 'Chronology & Flight Audit',
       icon: Clock,
       phase: 'MET Telemetry Log',
+    },
+    {
+      id: 'comms',
+      label: 'Comms & Telemedicine',
+      sublabel: 'Telemedicine Uplink Hub',
+      icon: Radio,
+      phase: 'Secure Uplink',
+    },
+    {
+      id: 'reports',
+      label: 'Medical Reports',
+      sublabel: 'NASA Clearance Dossier',
+      icon: FileText,
+      phase: 'Official Report',
+    },
+    {
+      id: 'environment',
+      label: 'Mission Environment',
+      sublabel: 'ECLSS & NASA DONKI',
+      icon: Gauge,
+      phase: 'Space Weather',
     },
   ];
 

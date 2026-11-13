@@ -149,27 +149,49 @@ export const VitalSignsPage: React.FC<VitalSignsPageProps> = ({ profile, onNavig
     }
   };
 
-  // Fetch or trigger Gemini AI Clinical Insight
+  // Fetch or trigger AI Clinical Insight
   const fetchAiInsight = async (currentVitalsData?: VitalsData) => {
     setIsAnalyzing(true);
-    try {
-      const dataToAnalyze = currentVitalsData || vitals;
+    const dataToAnalyze = currentVitalsData || vitals;
+    const compactProfile = {
+      name: profile.name,
+      restingHeartRate: profile.restingHeartRate,
+      spineElongation: profile.spineElongation,
+      missionElapsedDays: profile.missionElapsedDays,
+    };
+
+    const requestInsight = async () => {
       const res = await fetch('/api/ai/insight', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vitals: dataToAnalyze, profile }),
+        body: JSON.stringify({ vitals: dataToAnalyze, profile: compactProfile }),
       });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.insight) {
-          setAiInsight(json.insight);
-          setInsightSource(json.source || 'gemini-3.8-flash');
-        }
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      return res.json();
+    };
+
+    try {
+      let json: any;
+      try {
+        json = await requestInsight();
+      } catch (firstErr) {
+        // Retry once after short delay in case dev server is warming up
+        await new Promise((r) => setTimeout(r, 450));
+        json = await requestInsight();
+      }
+
+      if (json?.success && json?.insight) {
+        setAiInsight(json.insight);
+        setInsightSource(json.source || 'gemini-2.5-flash');
       }
     } catch (error) {
-      console.error('Error generating AI clinical insight:', error);
+      console.warn('AI clinical insight endpoint unreachable, using local clinical matrix:', error);
+      const hr = dataToAnalyze?.heartRate ?? 72;
+      const sleep = dataToAnalyze?.sleepHours ?? 5.9;
       setAiInsight(
-        `Your resting heart rate is elevated by ${(vitals?.heartRate || 72) - profile.restingHeartRate} bpm compared to flight baseline (${vitals?.heartRate || 72} bpm vs ${profile.restingHeartRate} bpm). This directly correlates with the reported ${vitals?.sleepHours || 5.9} hours of sleep and microgravity fluid redistribution. Recommend 45 minutes of pod rest, 500 mL electrolytic rehydration, and CEVIS cycle cool-down.`
+        `Your resting heart rate is elevated by ${hr - profile.restingHeartRate} bpm compared to flight baseline (${hr} bpm vs ${profile.restingHeartRate} bpm). This directly correlates with the reported ${sleep} hours of sleep and microgravity fluid redistribution. Recommend 45 minutes of pod rest, 500 mL electrolytic rehydration, and CEVIS cycle cool-down.`
       );
       setInsightSource('clinical-rule-matrix');
     } finally {
