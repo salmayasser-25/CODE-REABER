@@ -7,6 +7,7 @@ import type {
   TimelineEvent,
   SpaceExercise,
   ExerciseCategory,
+  WorkoutSessionLog,
   MedicalRestriction,
   DoctorNote,
   MedicalMessage,
@@ -18,6 +19,16 @@ import type {
   ReportReviewResponse,
   ExchangedReportAttachment,
   ForwardHistoryEntry,
+  MedicalAssistantMessage,
+  MedicalAssistantContext,
+  VitalSignEvaluation,
+  VitalThresholdStatus,
+  AssistantTriageLevel,
+  DoctorAvailabilityStatus,
+  DoctorTimeoutSeconds,
+  CommunicationChannel,
+  DoctorResponseTimerState,
+  EmergencyTriageState,
 } from '../types/astronaut.ts';
 
 // Initial Mock Dataset for Dr. Salma Johnson as specified in requirements
@@ -29,7 +40,7 @@ export let currentAstronautProfile: AstronautProfile = {
   role: 'Mission Specialist / Payload Bio-Engineer',
   missionId: 'EXP-74 / ARTEMIS BIO-LAB',
   healthStatus: 'nominal',
-  photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+  photoUrl: '/images/astronaut_salma_portrait.jpg',
   totalEvaHours: 28.5,
   bloodType: 'O-Positive (O+)',
   spineElongation: 4.2, // +4.2 cm microgravity spinal adaptation delta
@@ -467,53 +478,8 @@ const spaceExercises: SpaceExercise[] = [
     intensity: 'Moderate',
     status: 'available',
   },
-  {
-    id: 'ex-ared-trunk-rotation',
-    name: 'ARED Trunk Rotation',
-    description: 'Resisted rotational movement for oblique strengthening and spinal disc hydration cycling.',
-    category: 'Core',
-    equipment: 'ARED',
-    durationMinutes: 10,
-    caloriesBurned: 70,
-    targetMuscles: ['External Obliques', 'Internal Obliques', 'Erector Spinae'],
-    contraindications: ['Spinal Elongation', 'Lumbar Disc Herniation', 'Cervical Disc Decompression'],
-    videoUrl: '/videos/ared-trunk-rotation.mp4',
-    thumbnailUrl: '/videos/thumbnails/ared-trunk-rotation.jpg',
-    intensity: 'Moderate',
-    status: 'available',
-  },
-  {
-    id: 'ex-bungee-crunch',
-    name: 'Bungee-Cord Crunch',
-    description: 'Abdominal crunch using bungee cord resistance to simulate gravitational loading on rectus abdominis.',
-    category: 'Core',
-    equipment: 'Bungee Cord System',
-    durationMinutes: 10,
-    caloriesBurned: 65,
-    targetMuscles: ['Rectus Abdominis', 'Hip Flexors'],
-    contraindications: ['Cephalic Fluid Shift', 'Intracranial Pressure Elevation'],
-    videoUrl: '/videos/bungee-crunch.mp4',
-    thumbnailUrl: '/videos/thumbnails/bungee-crunch.jpg',
-    intensity: 'Low',
-    status: 'available',
-  },
 
   // ── Full Body ──
-  {
-    id: 'ex-cevis-cycling',
-    name: 'CEVIS Ergometer Cycling',
-    description: 'Continuous aerobic cycling on the Cycle Ergometer with Vibration Isolation System for cardiovascular conditioning.',
-    category: 'Full Body',
-    equipment: 'CEVIS',
-    durationMinutes: 30,
-    caloriesBurned: 250,
-    targetMuscles: ['Quadriceps', 'Hamstrings', 'Gastrocnemius', 'Cardiovascular System'],
-    contraindications: ['Cardiac Arrhythmia', 'Orthostatic Intolerance'],
-    videoUrl: '/videos/cevis-cycling.mp4',
-    thumbnailUrl: '/videos/thumbnails/cevis-cycling.jpg',
-    intensity: 'Moderate',
-    status: 'available',
-  },
   {
     id: 'ex-t2-treadmill',
     name: 'T2 Treadmill Running',
@@ -611,7 +577,11 @@ export const evaluateExercisesForAstronaut = (): {
     }
 
     // High-value safe countermeasures get recommended status
-    if (ex.id === 'ex-cevis-cycling' || ex.id === 'ex-core-stabilization' || ex.id === 'ex-ared-heel-raise') {
+    if (
+      ex.id === 'ex-resistive-band-circuit' ||
+      ex.id === 'ex-core-stabilization' ||
+      ex.id === 'ex-ared-heel-raise'
+    ) {
       return { ...ex, status: 'recommended' as const };
     }
 
@@ -619,6 +589,60 @@ export const evaluateExercisesForAstronaut = (): {
   });
 
   return { exercises, restricted };
+};
+
+// ─── Completed Workout Sessions Log ─────────────────────────────────────────
+export let completedWorkoutSessions: WorkoutSessionLog[] = [
+  {
+    id: 'WKT-84-01',
+    exerciseId: 'ex-resistive-band-circuit',
+    exerciseName: 'Resistive Band Full-Body Circuit',
+    category: 'Full Body',
+    equipment: 'Resistance Bands',
+    durationMinutes: 25,
+    actualDurationSeconds: 1500,
+    caloriesBurned: 200,
+    avgHeartRate: 122,
+    peakHeartRate: 136,
+    notes: 'Morning full-body resistance band conditioning protocol. Zero axial spinal compression reported.',
+    completedAt: new Date(Date.now() - 3600000 * 6).toISOString(),
+  },
+];
+
+export const getWorkoutSessions = (): WorkoutSessionLog[] => {
+  return completedWorkoutSessions;
+};
+
+export const logWorkoutSession = (
+  session: Omit<WorkoutSessionLog, 'id' | 'completedAt'>
+): WorkoutSessionLog => {
+  const newSession: WorkoutSessionLog = {
+    ...session,
+    id: `WKT-84-${String(completedWorkoutSessions.length + 1).padStart(2, '0')}`,
+    completedAt: new Date().toISOString(),
+  };
+
+  completedWorkoutSessions = [newSession, ...completedWorkoutSessions];
+
+  // Synchronize with Unified Medical & Telemetry Timeline
+  addTimelineEvent({
+    type: 'exercise_eva',
+    title: `Countermeasure Completed: ${newSession.exerciseName}`,
+    summary: `Equipment: ${newSession.equipment} · Duration: ${newSession.durationMinutes} min · Energy Output: ${newSession.caloriesBurned} kcal · Avg HR: ${newSession.avgHeartRate} bpm (Peak ${newSession.peakHeartRate} bpm)`,
+    details: {
+      exerciseId: newSession.exerciseId,
+      equipment: newSession.equipment,
+      durationMinutes: newSession.durationMinutes,
+      caloriesBurned: newSession.caloriesBurned,
+      avgHeartRate: newSession.avgHeartRate,
+      peakHeartRate: newSession.peakHeartRate,
+      notes: newSession.notes,
+    },
+    severity: 'nominal',
+    badge: 'EXERCISE',
+  });
+
+  return newSession;
 };
 
 // ─── Flight Surgeon Crew Registry ───────────────────────────────────────────
@@ -630,7 +654,7 @@ export let currentCrewMembers: CrewMemberSummary[] = [
     callsign: 'Nova',
     role: 'Mission Specialist / Payload Bio-Engineer',
     missionId: 'EXP-74 / ARTEMIS BIO-LAB',
-    photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+    photoUrl: '/images/astronaut_salma_portrait.jpg',
     healthStatus: 'monitoring',
     heartRate: 72,
     bloodPressure: '118/76',
@@ -1176,6 +1200,11 @@ export const sendMedicalMessage = (
     conv.lastTimestamp = newMsg.timestamp;
   }
 
+  // Sync direct Flight Surgeon replies in Communications with Doctor Chat & reset wait timer
+  if (conversationId === 'conv-astro-salma' && messageType !== 'telemetry_alert') {
+    recordSurgeonReplyToDoctorChat('ASTRO-74-SJ', newMsg.content, 'Dr. Marcus Vance, M.D. (Flight Surgeon)', true);
+  }
+
   return newMsg;
 };
 
@@ -1187,7 +1216,7 @@ export let currentMedicalAlerts: MedicalAlert[] = [
     astronautId: 'ASTRO-74-SJ',
     astronautName: 'Dr. Salma Johnson',
     astronautCallsign: 'Nova',
-    photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+    photoUrl: '/images/astronaut_salma_portrait.jpg',
     title: 'Microgravity Spinal Elongation Delta (+4.2 cm)',
     description: 'Ultrasonic bio-telemetry confirms +4.2 cm total intervertebral disc decompression exceeding 3.0 cm mission threshold. High acute disc herniation risk under axial loading.',
     severity: 'critical',
@@ -1201,7 +1230,7 @@ export let currentMedicalAlerts: MedicalAlert[] = [
     astronautId: 'ASTRO-74-SJ',
     astronautName: 'Dr. Salma Johnson',
     astronautCallsign: 'Nova',
-    photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+    photoUrl: '/images/astronaut_salma_portrait.jpg',
     title: 'Active Musculoskeletal Symptom: Lumbar Spine L3-L5',
     description: 'Astronaut logged dull lumbar ache (Intensity 4/10) following 90m ARED countermeasure block.',
     severity: 'warning',
@@ -1216,7 +1245,7 @@ export let currentMedicalAlerts: MedicalAlert[] = [
     astronautId: 'ASTRO-74-SJ',
     astronautName: 'Dr. Salma Johnson',
     astronautCallsign: 'Nova',
-    photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+    photoUrl: '/images/astronaut_salma_portrait.jpg',
     title: 'Resting Heart Rate Elevation (+14 bpm over baseline)',
     description: 'Resting heart rate telemetry reached 72 bpm compared to 58 bpm flight baseline, correlated with 5.9h fragmented sleep in Node 2.',
     severity: 'warning',
@@ -1230,7 +1259,7 @@ export let currentMedicalAlerts: MedicalAlert[] = [
     astronautId: 'ASTRO-74-SJ',
     astronautName: 'Dr. Salma Johnson',
     astronautCallsign: 'Nova',
-    photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+    photoUrl: '/images/astronaut_salma_portrait.jpg',
     title: 'Cephalic Fluid Shift Grade I (Frontal Sinus Fullness)',
     description: 'Sub-clinical microgravity headward fluid redistribution noted upon orbital wake-up. Cleared after 30 mins upright CEVIS cycling.',
     severity: 'info',
@@ -1281,11 +1310,25 @@ export const acknowledgeAlert = (id: string, surgeonName = 'Dr. Marcus Vance, M.
   if (alert) {
     alert.isAcknowledged = true;
     alert.reviewedBy = surgeonName;
+    // Clear linked persistent emergency override once acknowledged by authorized medical personnel
+    const session = currentEmergencySessions[alert.astronautId];
+    if (session && session.alertId === id) {
+      session.acknowledged = true;
+      session.isActive = false;
+    }
   }
   return alert || null;
 };
 
 export const resolveAlert = (id: string): boolean => {
+  const target = currentMedicalAlerts.find((a) => a.id === id);
+  if (target) {
+    const session = currentEmergencySessions[target.astronautId];
+    if (session && session.alertId === id) {
+      session.acknowledged = true;
+      session.isActive = false;
+    }
+  }
   const prevLen = currentMedicalAlerts.length;
   currentMedicalAlerts = currentMedicalAlerts.filter((a) => a.id !== id);
   return currentMedicalAlerts.length < prevLen;
@@ -1575,5 +1618,863 @@ export const deleteExchangedReport = (id: string): boolean => {
   currentExchangedReports = currentExchangedReports.filter((r) => r.id !== id);
   return currentExchangedReports.length < prevLen;
 };
+
+// ─── AI Medical Assistant & Doctor Availability Store (Separated Channels) ───
+
+export let currentDoctorAvailability: DoctorAvailabilityStatus = 'available';
+export let currentDoctorTimeoutSeconds: DoctorTimeoutSeconds = 7200;
+
+export const formatTimeoutDurationText = (seconds: DoctorTimeoutSeconds): string => {
+  if (seconds === 15) return '15 seconds';
+  if (seconds === 10800) return '3 hours';
+  return '2 hours';
+};
+
+export const formatTimeoutShortBadge = (seconds: DoctorTimeoutSeconds): string => {
+  if (seconds === 15) return '15S';
+  if (seconds === 10800) return '3H';
+  return '2H';
+};
+
+export let currentDoctorChannelHistories: Record<string, MedicalAssistantMessage[]> = {
+  'ASTRO-74-SJ': [
+    {
+      id: 'DOC-INIT-01',
+      astronautId: 'ASTRO-74-SJ',
+      channel: 'doctor',
+      sender: 'flight_surgeon',
+      senderId: 'user-fs-vance',
+      senderName: 'Dr. Marcus Vance, M.D. (Flight Surgeon)',
+      senderRole: 'Lead Flight Surgeon · MEDCOM-1',
+      content:
+        'Good copy, Nova. Telemetry downlink shows +4.2 cm spinal elongation and mild lumbar ache. Continue CEVIS cycling and report here directly if symptoms change.',
+      timestamp: new Date(Date.now() - 3600000 * 1.2).toISOString(),
+      triageLevel: 'low_risk',
+    },
+  ],
+};
+
+export let currentAiChannelHistories: Record<string, MedicalAssistantMessage[]> = {
+  'ASTRO-74-SJ': [
+    {
+      id: 'AI-INIT-01',
+      astronautId: 'ASTRO-74-SJ',
+      channel: 'ai',
+      sender: 'ai_assistant',
+      senderId: 'astra-ai-medical',
+      senderName: 'ASTRA AI Medical Assistant',
+      senderRole: 'Temporary Medical Support System',
+      content:
+        'ASTRA AI Medical Assistant standby synchronized with your orbital bio-telemetry. When Dr. Marcus Vance is unavailable or does not respond within the configured SLA window, I provide temporary medical guidance and vital sign explanations.',
+      timestamp: new Date(Date.now() - 3600000 * 0.4).toISOString(),
+      triageLevel: 'attention_required',
+      protocolBasis: 'ISS Expedition 74 Flight Medicine Triage Protocol — Baseline Telemetry Sync',
+      verifiedRecordsUsed: [
+        'Verified Telemetry: HR 72 bpm (Personal Flight Baseline: 58 bpm), BP 118/76 mmHg, SpO2 99%, Temp 36.8°C, RR 14 breaths/min, Sleep 5.9 hrs.',
+        'Verified Medical Record: +4.2 cm spinal elongation; active restriction on axial spinal loading.',
+      ],
+      vitalObservations: [
+        'AI Observation: Resting Heart Rate (72 bpm) is +14 bpm above recorded 58 bpm baseline alongside 5.9 hrs recorded sleep.',
+        'AI Observation: SpO2 (99%), BP (118/76 mmHg), Core Temperature (36.8°C), and Respiratory Rate (14 breaths/min) are within standard reference ranges; note that normal vitals alone do not rule out clinical symptoms.',
+      ],
+      disclaimer:
+        'Temporary medical support only — ASTRA AI is not a doctor, does not make diagnoses, and never prescribes medications or dosages.',
+      source: 'astra-system-sync',
+    },
+  ],
+};
+
+export interface InternalDoctorTimerRecord extends DoctorResponseTimerState {
+  triggerMessageId?: string;
+  triggerMessageContent?: string;
+  notifiedTimeoutTakeover?: boolean;
+}
+
+export let currentDoctorTimers: Record<string, InternalDoctorTimerRecord> = {};
+export let currentEmergencySessions: Record<string, EmergencyTriageState> = {};
+
+export const evaluateVitalSigns = (
+  hr: number,
+  bpSys: number,
+  bpDia: number,
+  spo2: number,
+  temp: number,
+  rr: number | null,
+  restingBaseline: number | null
+): VitalSignEvaluation[] => {
+  const hrDelta = restingBaseline !== null ? hr - restingBaseline : null;
+
+  let hrStatus: VitalThresholdStatus = 'normal';
+  let hrNote =
+    hrDelta !== null && restingBaseline !== null
+      ? `Within standard range (${hrDelta >= 0 ? `+${hrDelta}` : hrDelta} bpm vs recorded ${restingBaseline} bpm baseline).`
+      : 'Within standard resting adult range (50–100 bpm); personal flight baseline not recorded.';
+  if (hr < 45 || hr > 120) {
+    hrStatus = 'critical';
+    hrNote = hr > 120 ? 'Critically elevated tachycardia threshold (>120 bpm).' : 'Critically low bradycardia threshold (<45 bpm).';
+  } else if (hr > 100 || hr < 50 || (hrDelta !== null && hrDelta >= 12)) {
+    hrStatus = 'unusual';
+    hrNote =
+      hrDelta !== null && hrDelta >= 12 && restingBaseline !== null
+        ? `Elevated +${hrDelta} bpm above recorded ${restingBaseline} bpm flight baseline.`
+        : 'Outside standard resting adult range (50–100 bpm).';
+  }
+
+  let bpStatus: VitalThresholdStatus = 'normal';
+  let bpNote = 'Normotensive perfusion reading.';
+  if (bpSys >= 180 || bpDia >= 110 || bpSys < 85 || bpDia < 55) {
+    bpStatus = 'critical';
+    bpNote = bpSys >= 180 || bpDia >= 110 ? 'Hypertensive crisis range (>=180/110 mmHg).' : 'Hypotensive shock threshold (<85/55 mmHg).';
+  } else if (bpSys >= 140 || bpDia >= 90 || bpSys < 90 || bpDia < 60) {
+    bpStatus = 'unusual';
+    bpNote = 'Mildly outside standard 90–139 / 60–89 mmHg reference range.';
+  }
+
+  let spo2Status: VitalThresholdStatus = 'normal';
+  let spo2Note = 'Optimal arterial oxygen saturation.';
+  if (spo2 < 90) {
+    spo2Status = 'critical';
+    spo2Note = 'Critical hypoxemia threshold (<90%).';
+  } else if (spo2 < 95) {
+    spo2Status = 'unusual';
+    spo2Note = 'Mildly reduced oxygen saturation (90–94%). Monitor closely.';
+  }
+
+  let tempStatus: VitalThresholdStatus = 'normal';
+  let tempNote = 'Afebrile normothermic reading.';
+  if (temp >= 39.0 || temp <= 35.0) {
+    tempStatus = 'critical';
+    tempNote = temp >= 39.0 ? 'High fever threshold (>=39.0°C).' : 'Hypothermia threshold (<=35.0°C).';
+  } else if (temp >= 37.6 || temp <= 36.0) {
+    tempStatus = 'unusual';
+    tempNote = temp >= 37.6 ? 'Mildly elevated core temperature (37.6–38.9°C).' : 'Slightly below standard core temperature.';
+  }
+
+  let rrStatus: VitalThresholdStatus = 'unavailable';
+  let rrNote = 'No respiratory rate measurement recorded in current crew telemetry.';
+  if (rr !== null) {
+    rrStatus = 'normal';
+    rrNote = 'Unlabored normal respiratory cadence.';
+    if (rr > 26 || rr < 9) {
+      rrStatus = 'critical';
+      rrNote = rr > 26 ? 'Severe tachypnea (>26 breaths/min).' : 'Severe bradypnea (<9 breaths/min).';
+    } else if (rr > 20 || rr < 12) {
+      rrStatus = 'unusual';
+      rrNote = 'Outside typical resting respiratory rate (12–20 breaths/min).';
+    }
+  }
+
+  return [
+    { key: 'hr', label: 'Heart Rate', value: `${hr}`, unit: 'bpm', referenceRange: '50–100 bpm', status: hrStatus, note: hrNote },
+    { key: 'bp', label: 'Blood Pressure', value: `${bpSys}/${bpDia}`, unit: 'mmHg', referenceRange: '90–139 / 60–89', status: bpStatus, note: bpNote },
+    { key: 'spo2', label: 'Oxygen Saturation (SpO2)', value: `${spo2}`, unit: '%', referenceRange: '95–100%', status: spo2Status, note: spo2Note },
+    { key: 'temp', label: 'Body Temperature', value: `${temp}`, unit: '°C', referenceRange: '36.1–37.5°C', status: tempStatus, note: tempNote },
+    {
+      key: 'rr',
+      label: 'Respiratory Rate',
+      value: rr !== null ? `${rr}` : 'N/A',
+      unit: rr !== null ? 'breaths/min' : '',
+      referenceRange: '12–20 /min',
+      status: rrStatus,
+      note: rrNote,
+    },
+  ];
+};
+
+const ensureChannelHistories = (astronautId: string) => {
+  const crewMember = currentCrewMembers.find((c) => c.id === astronautId);
+  const targetName = crewMember?.name || currentAstronautProfile.name;
+  const targetCallsign = crewMember?.callsign || currentAstronautProfile.callsign;
+
+  if (!currentDoctorChannelHistories[astronautId]) {
+    currentDoctorChannelHistories[astronautId] = [
+      {
+        id: `DOC-INIT-${astronautId}`,
+        astronautId,
+        channel: 'doctor',
+        sender: 'flight_surgeon',
+        senderId: 'user-fs-vance',
+        senderName: 'Dr. Marcus Vance, M.D. (Flight Surgeon)',
+        senderRole: 'Lead Flight Surgeon · MEDCOM-1',
+        content: `Direct Flight Surgeon channel open for ${targetName} (${targetCallsign}). Send medical updates or questions here when Flight Surgeon status is Available.`,
+        timestamp: new Date().toISOString(),
+        triageLevel: 'low_risk',
+      },
+    ];
+  }
+
+  if (!currentAiChannelHistories[astronautId]) {
+    currentAiChannelHistories[astronautId] = [
+      {
+        id: `AI-INIT-${astronautId}`,
+        astronautId,
+        channel: 'ai',
+        sender: 'ai_assistant',
+        senderId: 'astra-ai-medical',
+        senderName: 'ASTRA AI Medical Assistant',
+        senderRole: 'Temporary Medical Support System',
+        content: `Hello ${targetName} (${targetCallsign}). Your recorded orbital vital signs are synchronized with ASTRA AI Medical Assistant. I provide temporary initial medical guidance whenever the Flight Surgeon is unavailable.`,
+        timestamp: new Date().toISOString(),
+        triageLevel: 'low_risk',
+        disclaimer:
+          'Temporary medical support only — ASTRA AI is not a doctor, does not make diagnoses, and never prescribes medications or dosages.',
+        source: 'astra-system-sync',
+      },
+    ];
+  }
+
+  if (!currentDoctorTimers[astronautId]) {
+    currentDoctorTimers[astronautId] = {
+      isWaiting: false,
+      timeoutSeconds: currentDoctorTimeoutSeconds,
+      aiTakeoverActive: false,
+    };
+  }
+};
+
+export const getActiveChannelForAstronaut = (astronautId: string): CommunicationChannel => {
+  ensureChannelHistories(astronautId);
+  if (currentDoctorAvailability === 'unavailable') return 'ai';
+  if (currentDoctorTimers[astronautId]?.aiTakeoverActive) return 'ai';
+  return 'doctor';
+};
+
+export const getDoctorAvailabilityConfig = () => ({
+  doctorStatus: currentDoctorAvailability,
+  timeoutSeconds: currentDoctorTimeoutSeconds,
+});
+
+export const setDoctorAvailabilityConfig = (params: {
+  doctorStatus?: DoctorAvailabilityStatus;
+  timeoutSeconds?: DoctorTimeoutSeconds;
+}) => {
+  if (params.timeoutSeconds === 15 || params.timeoutSeconds === 7200 || params.timeoutSeconds === 10800) {
+    currentDoctorTimeoutSeconds = params.timeoutSeconds;
+    for (const id of Object.keys(currentDoctorTimers)) {
+      currentDoctorTimers[id].timeoutSeconds = currentDoctorTimeoutSeconds;
+    }
+  }
+
+  if (params.doctorStatus === 'available' || params.doctorStatus === 'unavailable') {
+    currentDoctorAvailability = params.doctorStatus;
+    if (params.doctorStatus === 'unavailable') {
+      // Stop any pending wait timers since AI is immediately active
+      for (const id of Object.keys(currentDoctorTimers)) {
+        currentDoctorTimers[id].isWaiting = false;
+        currentDoctorTimers[id].startedAt = undefined;
+        currentDoctorTimers[id].expiresAt = undefined;
+        currentDoctorTimers[id].aiTakeoverActive = false;
+        currentDoctorTimers[id].aiTakeoverReason = undefined;
+      }
+    } else {
+      // Doctor became available: return channel to Doctor Chat
+      for (const id of Object.keys(currentDoctorTimers)) {
+        currentDoctorTimers[id].isWaiting = false;
+        currentDoctorTimers[id].startedAt = undefined;
+        currentDoctorTimers[id].expiresAt = undefined;
+        currentDoctorTimers[id].aiTakeoverActive = false;
+        currentDoctorTimers[id].aiTakeoverReason = undefined;
+      }
+    }
+  }
+
+  return getDoctorAvailabilityConfig();
+};
+
+export const getMedicalAssistantContext = (astronautId = 'ASTRO-74-SJ'): MedicalAssistantContext => {
+  ensureChannelHistories(astronautId);
+  const crewMember = currentCrewMembers.find((c) => c.id === astronautId);
+  const isPrimary = !crewMember || crewMember.id === currentAstronautProfile.id;
+
+  const restingBaseline: number | null = isPrimary ? currentAstronautProfile.restingHeartRate : null;
+
+  const hr = isPrimary ? currentVitals.heartRate : (crewMember?.heartRate || currentVitals.heartRate);
+  const [bpSysRaw, bpDiaRaw] = isPrimary
+    ? [currentVitals.bloodPressureSys, currentVitals.bloodPressureDia]
+    : (crewMember?.bloodPressure || '118/76').split('/').map((n) => Number(n));
+  const bpSys = bpSysRaw || 118;
+  const bpDia = bpDiaRaw || 76;
+  const spo2 = isPrimary ? currentVitals.spO2 : (crewMember?.spO2 || currentVitals.spO2);
+  const temp = isPrimary ? currentVitals.temperature : (crewMember?.temperature || currentVitals.temperature);
+  const rr: number | null = isPrimary ? currentVitals.respiratoryRate : null;
+  const sleepHours: number | null = isPrimary ? currentVitals.sleepHours : null;
+  const timestamp: string | null = isPrimary ? currentVitals.timestamp : null;
+  const lastMeasurementLabel = isPrimary
+    ? new Date(currentVitals.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : (crewMember?.lastMeasurementTime || 'Unavailable');
+
+  const vitalEvaluations = evaluateVitalSigns(hr, bpSys, bpDia, spo2, temp, rr, restingBaseline);
+
+  const activeSymptoms: SymptomReport[] = isPrimary
+    ? currentSymptoms.filter((s) => s.status !== 'resolved')
+    : crewMember?.latestSymptom && crewMember.latestSymptom !== 'None reported'
+    ? [
+        {
+          id: `SYM-${crewMember.id}`,
+          bodyPart: crewMember.latestSymptom,
+          painType: 'Dull',
+          intensity: 0,
+          notes: `Logged in crew summary (${crewMember.lastMeasurementTime}); numerical severity score not recorded.`,
+          timestamp: new Date().toISOString(),
+          status: 'monitoring',
+        },
+      ]
+    : [];
+
+  const activeRestrictions = currentMedicalRestrictions.filter(
+    (r) => r.astronautId === (crewMember?.id || currentAstronautProfile.id) && r.status === 'Active'
+  );
+
+  const activeChannel = getActiveChannelForAstronaut(astronautId);
+  const timerRecord = currentDoctorTimers[astronautId];
+  const timerState: DoctorResponseTimerState = {
+    isWaiting: Boolean(timerRecord?.isWaiting),
+    startedAt: timerRecord?.startedAt,
+    expiresAt: timerRecord?.expiresAt,
+    timeoutSeconds: currentDoctorTimeoutSeconds,
+    aiTakeoverActive: Boolean(timerRecord?.aiTakeoverActive),
+    aiTakeoverReason: timerRecord?.aiTakeoverReason,
+    aiTakeoverAt: timerRecord?.aiTakeoverAt,
+  };
+
+  const emergencySession = currentEmergencySessions[astronautId];
+  const emergencyState: EmergencyTriageState | null =
+    emergencySession && emergencySession.isActive && !emergencySession.acknowledged
+      ? emergencySession
+      : null;
+
+  const activeHistory =
+    activeChannel === 'doctor'
+      ? currentDoctorChannelHistories[astronautId]
+      : currentAiChannelHistories[astronautId];
+
+  return {
+    astronaut: {
+      id: crewMember?.id || currentAstronautProfile.id,
+      name: crewMember?.name || currentAstronautProfile.name,
+      callsign: crewMember?.callsign || currentAstronautProfile.callsign,
+      role: crewMember?.role || currentAstronautProfile.role,
+      missionId: crewMember?.missionId || currentAstronautProfile.missionId,
+      healthStatus: crewMember?.healthStatus || currentAstronautProfile.healthStatus,
+      restingHeartRate: restingBaseline,
+      spineElongation: isPrimary
+        ? currentAstronautProfile.spineElongation
+        : (crewMember?.spineElongation ?? null),
+      allergies: isPrimary ? currentAstronautProfile.allergies : [],
+      allergiesRecorded: isPrimary,
+      conditions: isPrimary
+        ? currentAstronautProfile.conditions
+        : crewMember?.latestSymptom && crewMember.latestSymptom !== 'None reported'
+        ? [crewMember.latestSymptom]
+        : [],
+    },
+    vitalsSnapshot: {
+      heartRate: hr,
+      bloodPressure: `${bpSys}/${bpDia}`,
+      bloodPressureSys: bpSys,
+      bloodPressureDia: bpDia,
+      spO2: spo2,
+      temperature: temp,
+      respiratoryRate: rr,
+      sleepHours,
+      timestamp,
+      lastMeasurementLabel,
+    },
+    vitalEvaluations,
+    activeSymptoms,
+    activeRestrictions,
+    doctorStatus: currentDoctorAvailability,
+    timeoutSeconds: currentDoctorTimeoutSeconds,
+    activeChannel,
+    timerState,
+    emergencyState,
+    history: activeHistory,
+    aiHistoryCount: currentAiChannelHistories[astronautId].length,
+    doctorHistoryCount: currentDoctorChannelHistories[astronautId].length,
+  };
+};
+
+export const addChannelMessage = (
+  astronautId: string,
+  channel: CommunicationChannel,
+  message: Omit<MedicalAssistantMessage, 'id' | 'timestamp' | 'astronautId' | 'channel'>
+): MedicalAssistantMessage => {
+  ensureChannelHistories(astronautId);
+
+  const newMsg: MedicalAssistantMessage = {
+    ...message,
+    id: `${channel === 'doctor' ? 'DOC' : 'AI'}-MSG-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    astronautId,
+    channel,
+    timestamp: new Date().toISOString(),
+  };
+
+  if (channel === 'doctor') {
+    currentDoctorChannelHistories[astronautId].push(newMsg);
+  } else {
+    currentAiChannelHistories[astronautId].push(newMsg);
+  }
+  return newMsg;
+};
+
+export const getAuthorizedAiHistory = (astronautId: string): MedicalAssistantMessage[] => {
+  ensureChannelHistories(astronautId);
+  return currentAiChannelHistories[astronautId];
+};
+
+export const getDoctorHistory = (astronautId: string): MedicalAssistantMessage[] => {
+  ensureChannelHistories(astronautId);
+  return currentDoctorChannelHistories[astronautId];
+};
+
+export const clearChannelHistory = (astronautId: string, channel?: CommunicationChannel): MedicalAssistantMessage[] => {
+  if (!channel || channel === 'doctor') {
+    delete currentDoctorChannelHistories[astronautId];
+    if (currentDoctorTimers[astronautId]) {
+      currentDoctorTimers[astronautId].isWaiting = false;
+      currentDoctorTimers[astronautId].startedAt = undefined;
+      currentDoctorTimers[astronautId].expiresAt = undefined;
+      currentDoctorTimers[astronautId].aiTakeoverActive = false;
+      currentDoctorTimers[astronautId].aiTakeoverReason = undefined;
+    }
+  }
+  if (!channel || channel === 'ai') {
+    delete currentAiChannelHistories[astronautId];
+  }
+  return getMedicalAssistantContext(astronautId).history;
+};
+
+export const startOrPreserveDoctorWaitTimer = (
+  astronautId: string,
+  triggerMessageId: string,
+  triggerMessageContent: string
+): InternalDoctorTimerRecord => {
+  ensureChannelHistories(astronautId);
+  const existing = currentDoctorTimers[astronautId];
+
+  // If already waiting on an unanswered doctor message, keep the original SLA deadline so follow-ups don't reset the clock
+  if (existing && existing.isWaiting && existing.expiresAt && Date.parse(existing.expiresAt) > Date.now()) {
+    existing.triggerMessageId = triggerMessageId;
+    existing.triggerMessageContent = triggerMessageContent;
+    return existing;
+  }
+
+  const startedAtMs = Date.now();
+  const durationMs = currentDoctorTimeoutSeconds * 1000;
+  const expiresAtMs = startedAtMs + durationMs;
+
+  currentDoctorTimers[astronautId] = {
+    isWaiting: true,
+    startedAt: new Date(startedAtMs).toISOString(),
+    expiresAt: new Date(expiresAtMs).toISOString(),
+    timeoutSeconds: currentDoctorTimeoutSeconds,
+    aiTakeoverActive: false,
+    triggerMessageId,
+    triggerMessageContent,
+    notifiedTimeoutTakeover: false,
+  };
+
+  return currentDoctorTimers[astronautId];
+};
+
+export const resetDoctorWaitTimer = (astronautId: string) => {
+  ensureChannelHistories(astronautId);
+  currentDoctorTimers[astronautId] = {
+    isWaiting: false,
+    startedAt: undefined,
+    expiresAt: undefined,
+    timeoutSeconds: currentDoctorTimeoutSeconds,
+    aiTakeoverActive: false,
+    aiTakeoverReason: undefined,
+    aiTakeoverAt: undefined,
+    notifiedTimeoutTakeover: false,
+  };
+};
+
+export const recordSurgeonReplyToDoctorChat = (
+  astronautId: string,
+  replyText: string,
+  surgeonName = 'Dr. Marcus Vance, M.D. (Flight Surgeon)',
+  skipCommunicationsMirror = false
+): MedicalAssistantMessage => {
+  ensureChannelHistories(astronautId);
+  resetDoctorWaitTimer(astronautId);
+
+  const surgeonMsg = addChannelMessage(astronautId, 'doctor', {
+    sender: 'flight_surgeon',
+    senderId: 'user-fs-vance',
+    senderName: surgeonName,
+    senderRole: 'Lead Flight Surgeon · MEDCOM-1',
+    content: replyText.trim(),
+    triageLevel: 'low_risk',
+  });
+
+  if (!skipCommunicationsMirror) {
+    const convId = 'conv-astro-salma';
+    const commMsg: MedicalMessage = {
+      id: `msg-fs-${Date.now()}`,
+      conversationId: convId,
+      senderId: 'user-fs-vance',
+      senderName: 'Dr. Marcus Vance, M.D. (You)',
+      senderRole: 'Lead Flight Surgeon',
+      content: replyText.trim(),
+      timestamp: surgeonMsg.timestamp,
+      isSurgeon: true,
+      messageType: 'clinical_directive',
+      priority: 'normal',
+    };
+    if (!currentMessages[convId]) currentMessages[convId] = [];
+    currentMessages[convId].push(commMsg);
+    const conv = currentConversations.find((c) => c.id === convId);
+    if (conv) {
+      conv.lastMessage = commMsg.content;
+      conv.lastTimestamp = commMsg.timestamp;
+    }
+  }
+
+  return surgeonMsg;
+};
+
+export const activateEmergencySession = (params: {
+  astronautId: string;
+  alertId: string;
+  reason: string;
+  instructions: string[];
+}): EmergencyTriageState => {
+  const { astronautId, alertId, reason, instructions } = params;
+  // Emergency overrides wait timer immediately (never wait 2 or 3 hours)
+  if (currentDoctorTimers[astronautId]) {
+    currentDoctorTimers[astronautId].isWaiting = false;
+    currentDoctorTimers[astronautId].startedAt = undefined;
+    currentDoctorTimers[astronautId].expiresAt = undefined;
+  }
+
+  const session: EmergencyTriageState = {
+    isActive: true,
+    alertId,
+    severity: 'critical',
+    reason,
+    triggeredAt: new Date().toISOString(),
+    instructions,
+    acknowledged: false,
+  };
+  currentEmergencySessions[astronautId] = session;
+  return session;
+};
+
+export const acknowledgeEmergencySession = (
+  astronautId: string,
+  surgeonName = 'Dr. Marcus Vance, M.D.'
+): EmergencyTriageState | null => {
+  const session = currentEmergencySessions[astronautId];
+  if (!session) return null;
+
+  session.acknowledged = true;
+  session.isActive = false;
+  if (session.alertId) {
+    acknowledgeAlert(session.alertId, surgeonName);
+  }
+  return session;
+};
+
+export const notifySurgeonOfAiTakeover = (astronautId: string, timeoutSeconds: DoctorTimeoutSeconds, triggerMessage?: string) => {
+  const ctx = getMedicalAssistantContext(astronautId);
+  const now = new Date().toISOString();
+  const label = formatTimeoutDurationText(timeoutSeconds);
+  const shortBadge = formatTimeoutShortBadge(timeoutSeconds);
+  const noticeContent = `⏱️ [AI TAKEOVER NOTICE — ${shortBadge} SLA EXCEEDED] Flight Surgeon did not respond to ${ctx.astronaut.name} (${ctx.astronaut.callsign}) within ${label}. ASTRA AI Medical Assistant has temporarily taken over to provide initial guidance${triggerMessage ? ` regarding: "${triggerMessage.slice(0, 120)}"` : ''}. Please review AI conversation history when available.`;
+
+  const medTeamMsg: MedicalMessage = {
+    id: `msg-takeover-${Date.now()}`,
+    conversationId: 'conv-med-team',
+    senderId: 'astra-availability-monitor',
+    senderName: 'ASTRA Availability Monitor',
+    senderRole: 'Automated Flight Medicine SLA Relay',
+    content: noticeContent,
+    timestamp: now,
+    isSurgeon: false,
+    messageType: 'telemetry_alert',
+    priority: 'priority',
+  };
+
+  if (!currentMessages['conv-med-team']) currentMessages['conv-med-team'] = [];
+  currentMessages['conv-med-team'].push(medTeamMsg);
+  const medTeamConv = currentConversations.find((c) => c.id === 'conv-med-team');
+  if (medTeamConv) {
+    medTeamConv.lastMessage = medTeamMsg.content;
+    medTeamConv.lastTimestamp = now;
+    medTeamConv.unreadCount = (medTeamConv.unreadCount || 0) + 1;
+  }
+
+  // Also add an alert for the Flight Surgeon so it appears in Medical Alerts
+  const alert: MedicalAlert = {
+    id: `ALT-TAKEOVER-${Date.now()}`,
+    astronautId: ctx.astronaut.id,
+    astronautName: ctx.astronaut.name,
+    astronautCallsign: ctx.astronaut.callsign,
+    photoUrl: ctx.astronaut.id === currentAstronautProfile.id ? currentAstronautProfile.photoUrl : '',
+    title: `AI Assistant Takeover (${label} Timeout): ${ctx.astronaut.name}`,
+    description: noticeContent,
+    severity: 'warning',
+    category: 'Biometrics',
+    timestamp: now,
+    isAcknowledged: false,
+    recommendedAction: 'Review saved AI Medical Assistant transcript and respond directly in Doctor Chat.',
+  };
+  currentMedicalAlerts = [alert, ...currentMedicalAlerts];
+
+  addTimelineEvent({
+    type: 'ai_insight',
+    title: `AI Temporary Takeover (${ctx.astronaut.callsign})`,
+    summary: `Flight Surgeon response timeout (${label}) elapsed. AI Medical Assistant activated.`,
+    severity: 'warning',
+    badge: 'SLA TAKEOVER',
+  });
+};
+
+export const detectEmergencyAndConcerningVitals = (
+  message: string,
+  context: MedicalAssistantContext
+): {
+  triageLevel: AssistantTriageLevel;
+  protocolBasis: string;
+  redFlags: string[];
+  urgentFlags: string[];
+  attentionFlags: string[];
+  criticalVitals: VitalSignEvaluation[];
+  unusualVitals: VitalSignEvaluation[];
+  needsFollowUpQuestions: boolean;
+} => {
+  const rawLower = message.toLowerCase();
+  // Exclude negated symptom clauses (e.g. "without chest pain or shortness of breath", "no fainting")
+  // while stopping at punctuation/contrast conjunctions so real symptoms are never masked.
+  const lower = rawLower.replace(
+    /\b(?:without(?:\s+any)?|no(?:\s+signs?\s+of|\s+symptoms?\s+of|\s+any)?|not\s+(?:having|experiencing|feeling)|don'?t\s+have|do\s+not\s+have|didn'?t|haven'?t\s+had|denies|deny)\s+(?!i\s+(?:have|feel|am)\b)[^.,;!?\n]+?(?=(?:[.,;!?\n]|\b(?:but|however|though|actually|yet|instead)\b|$))/gi,
+    ' '
+  );
+
+  // Level 4: Potentially life-threatening emergency red flags ONLY
+  const emergencyKeywords: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /\b(chest pain|chest tightness|chest pressure|heart attack|crushing pain|angina)\b/i, label: 'Acute chest pain or pressure' },
+    { pattern: /\b(shortness of breath|can'?t breathe|cannot breathe|difficulty breathing|trouble breathing|severe breathlessness|suffocat\w*|gasping|hypoxia)\b/i, label: 'Acute respiratory distress / breathing difficulty' },
+    { pattern: /\b(severe bleeding|hemorrhage|bleeding heavily|won'?t stop bleeding|coughing blood|vomiting blood)\b/i, label: 'Uncontrolled bleeding / hemorrhage' },
+    { pattern: /\b(faint|fainted|fainting|pass(?:ed)? out|unconscious|loss of consciousness|syncope|blackout|blacked out)\b/i, label: 'Syncope or loss of consciousness' },
+    { pattern: /\b(slurred speech|acute confusion|severely disoriented|stroke|facial droop|one side weak|weakness on one side|arm numbness.*weak|paralysis|seizure|convulsion)\b/i, label: 'Acute focal neurological deficit or seizure' },
+    { pattern: /\b(anaphylaxis|throat swelling|swollen tongue|allergic airway|hives and breathing)\b/i, label: 'Possible anaphylaxis / airway compromise' },
+    { pattern: /\b(decompression sickness|the bends|dcs symptoms|severe joint pain.*eva)\b/i, label: 'Suspected decompression sickness (DCS)' },
+    { pattern: /\b(sudden vision loss|lost vision|chemical in eye|toxic leak|ammonia exposure|co2 poisoning)\b/i, label: 'Sudden vision loss or toxic cabin exposure' },
+    { pattern: /\b(electric shock|electrocution|severe burn|severe head injury|head trauma)\b/i, label: 'Acute major trauma, burn, or electrical injury' },
+    { pattern: /\b(unbearable pain|10\/10|9\/10|mayday|medical emergency)\b/i, label: 'Critical acute distress or explicit emergency declaration' },
+  ];
+
+  // Level 3: Urgent clinical symptoms requiring prompt medical evaluation (NOT immediately life-threatening)
+  const urgentKeywords: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /\b(getting worse|worsening|progressively worse|much worse|rapidly)\b/i, label: 'Progressive worsening of symptoms' },
+    { pattern: /\b(can'?t stand|cannot stand|unable to walk|severe dizziness|spinning vertigo|room spinning)\b/i, label: 'Severe balance impairment or vertigo' },
+    { pattern: /\b(persistent vomiting|keep fluids down|vomiting repeatedly)\b/i, label: 'Persistent vomiting / dehydration risk' },
+    { pattern: /\b(high fever|fever.*chills|rigors|7\/10|8\/10|severe headache|severe pain|radiating pain)\b/i, label: 'High pain severity (7-8/10) or systemic fever' },
+    { pattern: /\b(near[- ]fainting|almost passed out|presyncope|palpitations.*dizzy|blurred vision)\b/i, label: 'Presyncope, visual disturbance, or symptomatic palpitations' },
+  ];
+
+  // Level 2: Persistent, moderate, or multi-symptom patterns requiring Flight Surgeon medical review
+  const persistenceOrModerateMarkers: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /\b(persistent|keeps coming back|won'?t go away|for days|several days|past few days|all day|since yesterday|more than 24|chronic|waking me up)\b/i, label: 'Persistent or prolonged symptom duration' },
+    { pattern: /\b(moderate|4\/10|5\/10|6\/10)\b/i, label: 'Moderate symptom intensity (4-6/10)' },
+    { pattern: /\b(lumbar|spine|spinal|lower back)\b/i, label: 'Symptom involving monitored lumbar spinal adaptation' },
+  ];
+
+  // Count distinct mild/non-emergency symptoms mentioned
+  const mildSymptomClusters: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /\b(dizzy|dizziness|lightheaded|light-headed)\b/i, label: 'dizziness/lightheadedness' },
+    { pattern: /\b(fatigue|tired|exhausted|low energy|lethargy|sleepy)\b/i, label: 'fatigue' },
+    { pattern: /\b(concentrat\w*|focus\w*|brain fog|memory|attention)\b/i, label: 'difficulty concentrating' },
+    { pattern: /\b(headache|sinus|pressure in head)\b/i, label: 'headache/sinus fullness' },
+    { pattern: /\b(nausea|queasy|upset stomach)\b/i, label: 'mild nausea' },
+    { pattern: /\b(ache|sore|soreness|stiff|stiffness|pain|discomfort)\b/i, label: 'localized discomfort' },
+  ];
+
+  const redFlags = emergencyKeywords.filter((i) => i.pattern.test(lower)).map((i) => i.label);
+  const urgentFlags = urgentKeywords.filter((i) => i.pattern.test(lower)).map((i) => i.label);
+  const attentionMarkers = persistenceOrModerateMarkers.filter((i) => i.pattern.test(lower)).map((i) => i.label);
+  const detectedMildClusters = mildSymptomClusters.filter((i) => i.pattern.test(lower)).map((i) => i.label);
+
+  const criticalVitals = context.vitalEvaluations.filter((v) => v.status === 'critical');
+  const unusualVitals = context.vitalEvaluations.filter((v) => v.status === 'unusual');
+
+  // Check if severity, onset, or duration is missing/unclear in the astronaut message
+  const hasDurationInfo = /\b(hour|hours|hr|hrs|minute|minutes|min|day|days|since|started|today|yesterday|week|just now|ago)\b/i.test(lower);
+  const hasSeverityInfo = /\b(mild|slight|minor|moderate|severe|intense|\/10|little|bit)\b/i.test(lower);
+  const needsFollowUpQuestions = !hasDurationInfo || !hasSeverityInfo || detectedMildClusters.length >= 2;
+
+  const attentionFlags: string[] = [...attentionMarkers];
+  if (detectedMildClusters.length >= 2) {
+    attentionFlags.push(`Combined symptoms reported (${detectedMildClusters.join(', ')})`);
+  }
+  if (unusualVitals.length > 0 && detectedMildClusters.length > 0) {
+    attentionFlags.push(`Concurrent vital deviation (${unusualVitals.map((v) => `${v.label} ${v.value}${v.unit}`).join(', ')})`);
+  }
+
+  let triageLevel: AssistantTriageLevel = 'low_risk';
+  let protocolBasis = 'ASTRA Mission Triage Protocol — Level 1 (Low Risk): Mild or isolated query without warning signs.';
+
+  if (redFlags.length > 0 || criticalVitals.length > 0) {
+    triageLevel = 'emergency';
+    protocolBasis = 'ASTRA Mission Triage Protocol — Level 4 (Emergency): Critical warning signs or critical vital thresholds require immediate escalation.';
+  } else if (
+    urgentFlags.length > 0 ||
+    (unusualVitals.length >= 2 && detectedMildClusters.length >= 1)
+  ) {
+    triageLevel = 'urgent';
+    protocolBasis = 'ASTRA Mission Triage Protocol — Level 3 (Urgent): Concerning symptom progression or systemic severity requires prompt medical team evaluation.';
+  } else if (
+    attentionFlags.length > 0 ||
+    unusualVitals.length > 0 && detectedMildClusters.length > 0
+  ) {
+    triageLevel = 'attention_required';
+    protocolBasis = 'ASTRA Mission Triage Protocol — Level 2 (Attention Required): Persistent, multi-symptom, or baseline-deviating presentation requiring Flight Surgeon review.';
+  }
+
+  return {
+    triageLevel,
+    protocolBasis,
+    redFlags,
+    urgentFlags,
+    attentionFlags,
+    criticalVitals,
+    unusualVitals,
+    needsFollowUpQuestions,
+  };
+};
+
+export const escalateMedicalIssueToTeam = (params: {
+  context: MedicalAssistantContext;
+  triageLevel: AssistantTriageLevel;
+  reasonSummary: string;
+  reportedSymptomText: string;
+}): MedicalAlert => {
+  const { context, triageLevel, reasonSummary, reportedSymptomText } = params;
+  const isEmergency = triageLevel === 'emergency';
+  const isUrgent = triageLevel === 'urgent';
+
+  const rrText = context.vitalsSnapshot.respiratoryRate !== null
+    ? `${context.vitalsSnapshot.respiratoryRate}/min`
+    : 'Not recorded';
+
+  const newAlert: MedicalAlert = {
+    id: `ALT-AI-${Date.now()}`,
+    astronautId: context.astronaut.id,
+    astronautName: context.astronaut.name,
+    astronautCallsign: context.astronaut.callsign,
+    photoUrl: context.astronaut.id === currentAstronautProfile.id ? currentAstronautProfile.photoUrl : '',
+    title: isEmergency
+      ? `EMERGENCY ESCALATION: ${context.astronaut.name} (${reasonSummary})`
+      : isUrgent
+      ? `URGENT EVALUATION: ${context.astronaut.name} (${reasonSummary})`
+      : `Medical Review Requested: ${context.astronaut.name} (${reasonSummary})`,
+    description: `Classified as ${triageLevel.replace('_', ' ').toUpperCase()} via ASTRA Triage Protocol. Astronaut report: "${reportedSymptomText.slice(0, 180)}". Recorded vitals: HR ${context.vitalsSnapshot.heartRate} bpm, BP ${context.vitalsSnapshot.bloodPressure} mmHg, SpO2 ${context.vitalsSnapshot.spO2}%, Temp ${context.vitalsSnapshot.temperature}°C, RR ${rrText}.`,
+    severity: isEmergency ? 'critical' : isUrgent ? 'warning' : 'info',
+    category: 'Biometrics',
+    timestamp: new Date().toISOString(),
+    isAcknowledged: false,
+    recommendedAction: isEmergency
+      ? 'IMMEDIATE FLIGHT SURGEON INTERVENTION REQUIRED. Establish live voice/video medical loop, verify ECLSS O2 levels, and initiate orbital emergency medical kit protocol.'
+      : isUrgent
+      ? 'Prompt Medical Team evaluation recommended. Contact astronaut via Doctor Chat to assess symptom progression and perform clinical exam.'
+      : 'Flight Surgeon medical review requested. Assess follow-up responses, hydration/sleep context, and symptom trajectory.',
+  };
+
+  currentMedicalAlerts = [newAlert, ...currentMedicalAlerts];
+
+  if (isEmergency) {
+    const member = currentCrewMembers.find((c) => c.id === context.astronaut.id);
+    if (member) {
+      member.healthStatus = 'critical';
+      member.latestSymptom = reasonSummary;
+      member.lastMeasurementTime = 'Just now (EMERGENCY)';
+    }
+  } else if (isUrgent) {
+    const member = currentCrewMembers.find((c) => c.id === context.astronaut.id);
+    if (member && member.healthStatus === 'nominal') {
+      member.healthStatus = 'monitoring';
+      member.latestSymptom = reasonSummary;
+      member.lastMeasurementTime = 'Just now (URGENT REVIEW)';
+    }
+  }
+
+  const teamMsg: MedicalMessage = {
+    id: `msg-esc-${Date.now()}`,
+    conversationId: 'conv-med-team',
+    senderId: 'astra-ai-triage',
+    senderName: isEmergency ? 'ASTRA Emergency Triage Relay' : 'ASTRA Triage Notification Relay',
+    senderRole: 'Automated Orbital Medical Relay',
+    content: `${
+      isEmergency
+        ? '🚨 [LEVEL 4 — EMERGENCY]'
+        : isUrgent
+        ? '⚠️ [LEVEL 3 — URGENT EVALUATION]'
+        : '📋 [LEVEL 2 — ATTENTION REQUIRED / REVIEW REQUEST]'
+    } ${context.astronaut.name} (${context.astronaut.callsign}): ${reasonSummary}. Reported: "${reportedSymptomText.slice(0, 140)}". Vitals: HR ${context.vitalsSnapshot.heartRate} bpm | BP ${context.vitalsSnapshot.bloodPressure} | SpO2 ${context.vitalsSnapshot.spO2}% | Temp ${context.vitalsSnapshot.temperature}°C | RR ${rrText}.`,
+    timestamp: new Date().toISOString(),
+    isSurgeon: false,
+    messageType: 'telemetry_alert',
+    priority: isEmergency ? 'urgent' : isUrgent ? 'priority' : 'normal',
+  };
+
+  if (!currentMessages['conv-med-team']) currentMessages['conv-med-team'] = [];
+  currentMessages['conv-med-team'].push(teamMsg);
+  const medTeamConv = currentConversations.find((c) => c.id === 'conv-med-team');
+  if (medTeamConv) {
+    medTeamConv.lastMessage = teamMsg.content;
+    medTeamConv.lastTimestamp = teamMsg.timestamp;
+    medTeamConv.unreadCount = (medTeamConv.unreadCount || 0) + 1;
+  }
+
+  addTimelineEvent({
+    type: 'ai_insight',
+    title: isEmergency
+      ? `Emergency Escalation Triggered (${context.astronaut.callsign})`
+      : isUrgent
+      ? `Urgent Medical Evaluation Requested (${context.astronaut.callsign})`
+      : `Medical Review Requested (${context.astronaut.callsign})`,
+    summary: `${reasonSummary} — ${
+      isEmergency ? 'Immediate Emergency Alert dispatched.' : isUrgent ? 'Escalated to Medical Team.' : 'Flight Surgeon notified for review.'
+    }`,
+    severity: isEmergency ? 'alert' : isUrgent ? 'warning' : 'info',
+    badge: isEmergency ? 'EMERGENCY' : isUrgent ? 'URGENT' : 'REVIEW REQ',
+  });
+
+  return newAlert;
+};
+
+export const postAstronautDirectToSurgeon = (astronautId: string, content: string): MedicalMessage => {
+  const ctx = getMedicalAssistantContext(astronautId);
+  const targetConvId = 'conv-astro-salma';
+
+  const msg: MedicalMessage = {
+    id: `msg-astro-${Date.now()}`,
+    conversationId: targetConvId,
+    senderId: ctx.astronaut.id,
+    senderName: ctx.astronaut.name,
+    senderRole: ctx.astronaut.role,
+    content: content.trim(),
+    timestamp: new Date().toISOString(),
+    isSurgeon: false,
+    messageType: 'routine',
+    priority: 'normal',
+  };
+
+  if (!currentMessages[targetConvId]) currentMessages[targetConvId] = [];
+  currentMessages[targetConvId].push(msg);
+
+  const conv = currentConversations.find((c) => c.id === targetConvId);
+  if (conv) {
+    conv.lastMessage = msg.content;
+    conv.lastTimestamp = msg.timestamp;
+    conv.unreadCount = (conv.unreadCount || 0) + 1;
+  }
+
+  return msg;
+};
+
 
 

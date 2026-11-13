@@ -38,7 +38,7 @@ export const VitalSignsPage: React.FC<VitalSignsPageProps> = ({ profile, onNavig
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [aiInsight, setAiInsight] = useState<string>('');
-  const [insightSource, setInsightSource] = useState<string>('gemini-3.8-flash');
+  const [insightSource, setInsightSource] = useState<string>('gemini-4-hydrogen');
   const [selectedRange, setSelectedRange] = useState<'7D' | '24H'>('7D');
   const [isSimulatingAlert, setIsSimulatingAlert] = useState<boolean>(true);
 
@@ -149,27 +149,49 @@ export const VitalSignsPage: React.FC<VitalSignsPageProps> = ({ profile, onNavig
     }
   };
 
-  // Fetch or trigger Gemini AI Clinical Insight
+  // Fetch or trigger AI Clinical Insight
   const fetchAiInsight = async (currentVitalsData?: VitalsData) => {
     setIsAnalyzing(true);
-    try {
-      const dataToAnalyze = currentVitalsData || vitals;
+    const dataToAnalyze = currentVitalsData || vitals;
+    const compactProfile = {
+      name: profile.name,
+      restingHeartRate: profile.restingHeartRate,
+      spineElongation: profile.spineElongation,
+      missionElapsedDays: profile.missionElapsedDays,
+    };
+
+    const requestInsight = async () => {
       const res = await fetch('/api/ai/insight', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vitals: dataToAnalyze, profile }),
+        body: JSON.stringify({ vitals: dataToAnalyze, profile: compactProfile }),
       });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.insight) {
-          setAiInsight(json.insight);
-          setInsightSource(json.source || 'gemini-3.8-flash');
-        }
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      return res.json();
+    };
+
+    try {
+      let json: any;
+      try {
+        json = await requestInsight();
+      } catch (firstErr) {
+        // Retry once after short delay in case dev server is warming up
+        await new Promise((r) => setTimeout(r, 450));
+        json = await requestInsight();
+      }
+
+      if (json?.success && json?.insight) {
+        setAiInsight(json.insight);
+        setInsightSource(json.source || 'gemini-4-hydrogen');
       }
     } catch (error) {
-      console.error('Error generating AI clinical insight:', error);
+      console.warn('AI clinical insight endpoint unreachable, using local clinical matrix:', error);
+      const hr = dataToAnalyze?.heartRate ?? 72;
+      const sleep = dataToAnalyze?.sleepHours ?? 5.9;
       setAiInsight(
-        `Your resting heart rate is elevated by ${(vitals?.heartRate || 72) - profile.restingHeartRate} bpm compared to flight baseline (${vitals?.heartRate || 72} bpm vs ${profile.restingHeartRate} bpm). This directly correlates with the reported ${vitals?.sleepHours || 5.9} hours of sleep and microgravity fluid redistribution. Recommend 45 minutes of pod rest, 500 mL electrolytic rehydration, and CEVIS cycle cool-down.`
+        `Your resting heart rate is elevated by ${hr - profile.restingHeartRate} bpm compared to flight baseline (${hr} bpm vs ${profile.restingHeartRate} bpm). This directly correlates with the reported ${sleep} hours of sleep and microgravity fluid redistribution. Recommend 45 minutes of pod rest, 500 mL electrolytic rehydration, and CEVIS cycle cool-down.`
       );
       setInsightSource('clinical-rule-matrix');
     } finally {
@@ -614,7 +636,7 @@ export const VitalSignsPage: React.FC<VitalSignsPageProps> = ({ profile, onNavig
                   AI Clinical Insight
                 </h3>
                 <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-[#FF8C00]/20 border border-[#FF8C00]/50 text-[#FFB347]">
-                  {insightSource === 'gemini-3.8-flash' ? 'POWERED BY GEMINI 3.8 FLASH' : 'AEROSPACE CLINICAL ENGINE'}
+                  {insightSource.startsWith('gemini') ? 'POWERED BY GEMINI AI' : 'AEROSPACE CLINICAL ENGINE'}
                 </span>
               </div>
               <p className="text-xs font-sans text-slate-300 mt-0.5">

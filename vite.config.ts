@@ -12,10 +12,9 @@ export default defineConfig(() => {
       },
     },
     server: {
-      hmr: process.env.CODESPACES === 'true'
-        ? { clientPort: 443 }
-        : process.env.DISABLE_HMR !== 'true',
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // HMR is disabled in AI Studio to prevent WebSocket errors in middleware mode.
+      hmr: false,
+      watch: null,
     },
   };
 });

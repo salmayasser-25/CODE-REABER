@@ -3,7 +3,6 @@ import {
   UserCheck, 
   Activity, 
   FileText, 
-  Dumbbell, 
   ShieldAlert, 
   Clock, 
   ArrowLeft, 
@@ -74,7 +73,7 @@ export const IndividualAstronautProfile: React.FC<IndividualAstronautProfileProp
   onLiftRestriction,
   onNavigateTab,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'vitals' | 'symptoms' | 'exercise' | 'restrictions' | 'timeline'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'vitals' | 'symptoms' | 'restrictions' | 'timeline'>('overview');
   const [timeFilter, setTimeFilter] = useState<'24H' | '7D' | '30D'>('7D');
   const [timelineFilter, setTimelineFilter] = useState<string>('all');
 
@@ -155,7 +154,15 @@ export const IndividualAstronautProfile: React.FC<IndividualAstronautProfileProp
                   SJ
                 </div>
               )}
-              <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-[#FF8C00] border-2 border-black animate-pulse" />
+              <span
+                className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-black ${
+                  profile.healthStatus === 'critical'
+                    ? 'bg-rose-500 animate-pulse'
+                    : profile.healthStatus === 'monitoring'
+                    ? 'bg-[#FF8C00] animate-pulse'
+                    : 'bg-[#10b981]'
+                }`}
+              />
             </div>
 
             <div>
@@ -163,7 +170,15 @@ export const IndividualAstronautProfile: React.FC<IndividualAstronautProfileProp
                 <h1 className="text-xl sm:text-2xl font-black text-white font-['Chakra_Petch',sans-serif]">
                   {profile.name}
                 </h1>
-                <span className="text-xs font-mono px-2 py-0.5 rounded font-bold bg-[#FF8C00]/20 text-[#FF8C00] border border-[#FF8C00]/50 uppercase tracking-wider">
+                <span
+                  className={`text-xs font-mono px-2 py-0.5 rounded font-bold border uppercase tracking-wider ${
+                    profile.healthStatus === 'critical'
+                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/50'
+                      : profile.healthStatus === 'monitoring'
+                      ? 'bg-[#FF8C00]/20 text-[#FF8C00] border-[#FF8C00]/50'
+                      : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                  }`}
+                >
                   HEALTH STATUS: {profile.healthStatus.toUpperCase()}
                 </span>
                 <span className="text-xs font-mono px-2 py-0.5 rounded font-bold bg-[#00E5FF]/15 text-[#00E5FF] border border-[#00E5FF]/40">
@@ -209,15 +224,14 @@ export const IndividualAstronautProfile: React.FC<IndividualAstronautProfileProp
           </div>
         </div>
 
-        {/* 6 Section Tabs Bar (Requirement 3) */}
+        {/* 5 Section Tabs Bar */}
         <div className="flex items-center gap-2 overflow-x-auto mt-6 pt-4 border-t border-slate-800/90 text-xs font-mono">
           {[
             { id: 'overview', label: '1. Overview', icon: UserCheck },
             { id: 'vitals', label: '2. Vital Signs Analytics', icon: Activity },
             { id: 'symptoms', label: `3. Symptoms & History (${activeSymptoms.length})`, icon: Stethoscope },
-            { id: 'exercise', label: '4. Exercise Monitoring', icon: Dumbbell },
-            { id: 'restrictions', label: `5. Medical Restrictions (${activeRestrictions.length})`, icon: ShieldAlert },
-            { id: 'timeline', label: '6. Medical Timeline', icon: Clock },
+            { id: 'restrictions', label: `4. Medical Restrictions (${activeRestrictions.length})`, icon: ShieldAlert },
+            { id: 'timeline', label: '5. Medical Timeline', icon: Clock },
           ].map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -694,81 +708,7 @@ export const IndividualAstronautProfile: React.FC<IndividualAstronautProfileProp
         </div>
       )}
 
-      {/* Tab 4: Exercise Monitoring */}
-      {activeTab === 'exercise' && (
-        <div className="space-y-6">
-          <div className="glass-panel rounded-2xl p-4.5 border border-slate-800 flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-white font-['Chakra_Petch',sans-serif] uppercase flex items-center gap-2">
-                <Dumbbell className="w-4 h-4 text-[#00E5FF]" />
-                <span>Countermeasure Protocol & Exercise Performance</span>
-              </h3>
-              <p className="text-xs text-slate-300 font-sans mt-0.5">
-                Evaluation of space countermeasure devices (ARED, CEVIS, T2) against astronaut spinal adaptation.
-              </p>
-            </div>
-            <span className="text-xs font-mono text-emerald-400 px-3 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/40 font-bold">
-              WEEKLY TARGET: 14.0 HRS (92% COMPLIANT)
-            </span>
-          </div>
-
-          {/* Exercise Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {exercises.map((ex) => {
-              const isRestricted = ex.status === 'restricted';
-              return (
-                <div
-                  key={ex.id}
-                  className={`glass-panel rounded-2xl p-4 border transition-all ${
-                    isRestricted
-                      ? 'border-rose-500/40 bg-rose-950/15'
-                      : 'border-slate-800 hover:border-[#00E5FF]/50'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="font-bold text-white text-sm font-['Chakra_Petch',sans-serif]">
-                        {ex.name}
-                      </div>
-                      <div className="text-[11px] font-mono text-slate-400">
-                        {ex.category} · {ex.equipment}
-                      </div>
-                    </div>
-                    <span
-                      className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
-                        isRestricted
-                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                          : ex.status === 'recommended'
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                          : 'bg-slate-800 text-slate-300'
-                      }`}
-                    >
-                      {ex.status}
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-slate-300 font-sans mt-2.5 line-clamp-2">
-                    {ex.description}
-                  </p>
-
-                  <div className="mt-3 pt-2.5 border-t border-slate-800 flex justify-between text-xs font-mono">
-                    <span className="text-slate-400">Duration: {ex.durationMinutes} min</span>
-                    <span className="text-white font-bold">{ex.caloriesBurned} kcal</span>
-                  </div>
-
-                  {isRestricted && ex.warningMessage && (
-                    <div className="mt-2.5 p-2 rounded-lg bg-rose-900/40 border border-rose-700/50 text-[11px] font-mono text-rose-200">
-                      {ex.warningMessage}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Tab 5: Medical Restrictions */}
+      {/* Tab 4: Medical Restrictions */}
       {activeTab === 'restrictions' && (
         <div className="space-y-6">
           <div className="glass-panel rounded-2xl p-4.5 border border-rose-500/40 flex items-center justify-between">

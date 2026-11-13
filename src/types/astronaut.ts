@@ -132,7 +132,7 @@ export interface SpaceExercise {
   intensity: 'Low' | 'Moderate' | 'High';
   status: ExerciseStatus;
   warningMessage?: string; // shown when restricted
-  restrictionReason?: string;
+  restrictionReason?: string; // reason why restricted
 }
 
 export interface FitnessAIAnalysis {
@@ -141,9 +141,24 @@ export interface FitnessAIAnalysis {
   restrictedExercises: { exerciseId: string; reason: string }[];
   dailyPlan: string;
   cautions: string[];
-  fitnessScore?: number;
   recommendations?: string[];
+  fitnessScore?: number;
   timestamp: string;
+}
+
+export interface WorkoutSessionLog {
+  id: string;
+  exerciseId: string;
+  exerciseName: string;
+  category: ExerciseCategory;
+  equipment: string;
+  durationMinutes: number;
+  actualDurationSeconds: number;
+  caloriesBurned: number;
+  avgHeartRate: number;
+  peakHeartRate: number;
+  notes?: string;
+  completedAt: string;
 }
 
 export type TimelineEventType = 'vitals' | 'symptom' | 'ai_insight' | 'checkin' | 'exercise_eva' | 'restriction' | 'doctor_note';
@@ -321,6 +336,111 @@ export interface ExchangedMedicalReport {
   forwardHistory?: ForwardHistoryEntry[];
 }
 
+export type DoctorAvailabilityStatus = 'available' | 'unavailable';
+export type AssistantTriageLevel = 'low_risk' | 'attention_required' | 'urgent' | 'emergency';
+export type VitalThresholdStatus = 'normal' | 'unusual' | 'critical' | 'unavailable';
+export type CommunicationChannel = 'doctor' | 'ai';
+export type DoctorTimeoutSeconds = 15 | 7200 | 10800;
 
+export interface VitalSignEvaluation {
+  key: 'hr' | 'bp' | 'spo2' | 'temp' | 'rr';
+  label: string;
+  value: string;
+  unit: string;
+  referenceRange: string;
+  status: VitalThresholdStatus;
+  note: string;
+}
+
+export interface MedicalAssistantMessage {
+  id: string;
+  astronautId: string;
+  channel: CommunicationChannel;
+  sender: 'astronaut' | 'ai_assistant' | 'flight_surgeon' | 'system';
+  senderId: string;
+  senderName: string;
+  senderRole?: string;
+  content: string;
+  timestamp: string;
+  triageLevel?: AssistantTriageLevel;
+  protocolBasis?: string;
+  verifiedRecordsUsed?: string[];
+  vitalsSnapshot?: {
+    heartRate: number;
+    bloodPressure: string;
+    spO2: number;
+    temperature: number;
+    respiratoryRate: number | null;
+    sleepHours: number | null;
+    timestamp: string | null;
+  };
+  vitalObservations?: string[];
+  followUpQuestions?: string[];
+  firstAidSteps?: string[];
+  emergencyInstructions?: string[];
+  escalationTriggered?: boolean;
+  escalatedAlertId?: string;
+  disclaimer?: string;
+  source?: string;
+}
+
+export interface DoctorResponseTimerState {
+  isWaiting: boolean;
+  startedAt?: string;
+  expiresAt?: string;
+  timeoutSeconds: DoctorTimeoutSeconds;
+  aiTakeoverActive: boolean;
+  aiTakeoverReason?: string;
+  aiTakeoverAt?: string;
+}
+
+export interface EmergencyTriageState {
+  isActive: boolean;
+  alertId: string;
+  severity: 'critical';
+  reason: string;
+  triggeredAt: string;
+  instructions: string[];
+  acknowledged: boolean;
+}
+
+export interface MedicalAssistantContext {
+  astronaut: {
+    id: string;
+    name: string;
+    callsign: string;
+    role: string;
+    missionId: string;
+    healthStatus: 'nominal' | 'monitoring' | 'critical';
+    restingHeartRate: number | null;
+    spineElongation: number | null;
+    allergies: string[];
+    allergiesRecorded: boolean;
+    conditions: string[];
+  };
+  vitalsSnapshot: {
+    heartRate: number;
+    bloodPressure: string;
+    bloodPressureSys: number;
+    bloodPressureDia: number;
+    spO2: number;
+    temperature: number;
+    respiratoryRate: number | null;
+    sleepHours: number | null;
+    timestamp: string | null;
+    lastMeasurementLabel: string;
+  };
+  vitalEvaluations: VitalSignEvaluation[];
+  activeSymptoms: SymptomReport[];
+  activeRestrictions: MedicalRestriction[];
+  doctorStatus: DoctorAvailabilityStatus;
+  timeoutSeconds: DoctorTimeoutSeconds;
+  activeChannel: CommunicationChannel;
+  timerState: DoctorResponseTimerState;
+  emergencyState: EmergencyTriageState | null;
+  history: MedicalAssistantMessage[];
+  aiHistoryCount: number;
+  doctorHistoryCount: number;
+}
 
 

@@ -1,20 +1,14 @@
 import React from 'react';
 import { 
   Users, 
-  Heart, 
   Activity, 
   AlertTriangle, 
   CheckCircle2, 
   ShieldAlert, 
   ArrowRight, 
-  TrendingUp, 
   Clock, 
   ChevronRight, 
-  Stethoscope,
-  Radio,
-  FileText,
-  Dumbbell,
-  Sparkles
+  Stethoscope
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -65,6 +59,16 @@ export const DashboardOverviewPage: React.FC<DashboardOverviewPageProps> = ({
   const criticalAstronauts = crew.filter((c) => c.healthStatus === 'critical').length;
   const activeRestrictions = restrictions.filter((r) => r.status === 'Active');
   const pendingAlerts = alerts.filter((a) => !a.isAcknowledged);
+
+  // Prioritize highest-severity unacknowledged alert for the Mission Overview Triage Banner
+  const severityRank: Record<string, number> = { critical: 0, warning: 1, info: 2 };
+  const topPriorityAlert = [...pendingAlerts].sort(
+    (a, b) => (severityRank[a.severity] ?? 3) - (severityRank[b.severity] ?? 3)
+  )[0];
+
+  const attentionCrewList = crew.filter((c) => c.healthStatus === 'monitoring' || c.healthStatus === 'critical');
+  const filteredCrew = crew.filter((member) => crewStatusFilter === 'all' || member.healthStatus === crewStatusFilter);
+  const hrDelta = vitals ? vitals.heartRate - profile.restingHeartRate : 14;
 
   const chartData = vitals?.historicalHeartRate || [
     { date: 'Day -6', dayLabel: 'Nov 04', hr: 62, baseline: 58 },
@@ -118,29 +122,7 @@ export const DashboardOverviewPage: React.FC<DashboardOverviewPageProps> = ({
 
       {/* 4 Data-Driven Statistics Cards (Calculated directly from project records) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Astronauts */}
-        <div className="glass-panel-interactive rounded-2xl p-4 border border-[#00E5FF]/30 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-mono text-slate-400 font-bold uppercase tracking-wider">
-              TOTAL ASTRONAUTS
-            </span>
-            <div className="p-2 rounded-lg bg-[#00E5FF]/15 text-[#00E5FF] border border-[#00E5FF]/40">
-              <Users className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-black font-['Chakra_Petch',sans-serif] text-white">
-              {totalAstronauts}
-            </span>
-            <span className="text-xs font-mono text-slate-400">CREW IN ORBIT</span>
-          </div>
-          <div className="mt-2.5 text-[11px] font-mono text-slate-400 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#10b981]" />
-            <span>Expedition 74 Active Manifest</span>
-          </div>
-        </div>
-
-        {/* Total Astronauts */}
+        {/* 1. Total Astronauts */}
         <div 
           onClick={() => setCrewStatusFilter('all')}
           className={`glass-panel-interactive rounded-2xl p-4 border cursor-pointer ${
@@ -167,7 +149,7 @@ export const DashboardOverviewPage: React.FC<DashboardOverviewPageProps> = ({
           </div>
         </div>
 
-        {/* Healthy Astronauts */}
+        {/* 2. Healthy Astronauts */}
         <div 
           onClick={() => setCrewStatusFilter('nominal')}
           className={`glass-panel-interactive rounded-2xl p-4 border cursor-pointer ${
@@ -193,11 +175,13 @@ export const DashboardOverviewPage: React.FC<DashboardOverviewPageProps> = ({
           </div>
         </div>
 
-        {/* Astronauts Requiring Attention */}
+        {/* 3. Astronauts Requiring Attention / Critical */}
         <div 
-          onClick={() => setCrewStatusFilter('monitoring')}
+          onClick={() => setCrewStatusFilter(criticalAstronauts > 0 && requiringAttention === 0 ? 'critical' : 'monitoring')}
           className={`glass-panel-interactive rounded-2xl p-4 border cursor-pointer ${
-            crewStatusFilter === 'monitoring' ? 'border-[#FF8C00] shadow-[0_0_15px_rgba(255,140,0,0.3)]' : 'border-[#FF8C00]/40'
+            crewStatusFilter === 'monitoring' || crewStatusFilter === 'critical'
+              ? 'border-[#FF8C00] shadow-[0_0_15px_rgba(255,140,0,0.3)]'
+              : 'border-[#FF8C00]/40'
           }`}
         >
           <div className="flex items-center justify-between">
@@ -210,16 +194,22 @@ export const DashboardOverviewPage: React.FC<DashboardOverviewPageProps> = ({
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-3xl font-black font-['Chakra_Petch',sans-serif] text-[#FFB347]">
-              {requiringAttention}
+              {requiringAttention + criticalAstronauts}
             </span>
-            <span className="text-xs font-mono text-[#FF8C00] font-bold">MONITORING</span>
+            <span className="text-xs font-mono text-[#FF8C00] font-bold">
+              {criticalAstronauts > 0 ? `${criticalAstronauts} CRITICAL` : 'MONITORING'}
+            </span>
           </div>
           <div className="mt-2.5 text-[11px] font-mono text-slate-300 flex items-center gap-1.5 truncate">
-            <span>Filter crew: Salma (+4.2cm spine)</span>
+            <span>
+              {attentionCrewList.length > 0
+                ? `Focus: ${attentionCrewList.map((c) => c.callsign).join(', ')} (+${profile.spineElongation}cm spine)`
+                : 'All crew metrics nominal'}
+            </span>
           </div>
         </div>
 
-        {/* Active Medical Restrictions */}
+        {/* 4. Active Medical Restrictions */}
         <div 
           onClick={() => onNavigateTab('restrictions')}
           className="glass-panel-interactive rounded-2xl p-4 border border-rose-500/35 relative overflow-hidden cursor-pointer hover:border-rose-400"
@@ -238,31 +228,60 @@ export const DashboardOverviewPage: React.FC<DashboardOverviewPageProps> = ({
             </span>
             <span className="text-xs font-mono text-slate-400">SAFETY PROTOCOLS</span>
           </div>
-          <div className="mt-2.5 text-[11px] font-mono text-rose-400 flex items-center gap-1.5">
-            <span>Axial loading & impact running held →</span>
+          <div className="mt-2.5 text-[11px] font-mono text-rose-400 flex items-center gap-1.5 truncate">
+            <span>
+              {activeRestrictions.length > 0
+                ? `${activeRestrictions[0].affectedRegion} holds →`
+                : 'No active medical holds'}
+            </span>
           </div>
         </div>
       </div>
 
       {/* Active Medical Alerts Triage Banner */}
-      {alerts && alerts.length > 0 && (
-        <div className="glass-panel rounded-2xl p-4 border border-rose-500/40 bg-gradient-to-r from-rose-950/25 via-slate-900/60 to-transparent flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      {topPriorityAlert ? (
+        <div
+          className={`glass-panel rounded-2xl p-4 border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
+            topPriorityAlert.severity === 'critical'
+              ? 'border-rose-500/50 bg-gradient-to-r from-rose-950/30 via-slate-900/60 to-transparent'
+              : 'border-[#FF8C00]/45 bg-gradient-to-r from-[#FF8C00]/15 via-slate-900/60 to-transparent'
+          }`}
+        >
           <div className="flex items-start gap-3">
-            <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/50 text-rose-400 shrink-0 mt-0.5">
-              <ShieldAlert className="w-5 h-5 text-rose-400 animate-pulse" />
+            <div
+              className={`p-2.5 rounded-xl border shrink-0 mt-0.5 ${
+                topPriorityAlert.severity === 'critical'
+                  ? 'bg-rose-500/20 border-rose-500/50 text-rose-400'
+                  : 'bg-[#FF8C00]/20 border-[#FF8C00]/50 text-[#FF8C00]'
+              }`}
+            >
+              <ShieldAlert className="w-5 h-5 animate-pulse" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-black text-rose-400 uppercase tracking-wider">
-                  ACTIVE CLINICAL ALERTS ({pendingAlerts.length} UNREVIEWED)
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`text-[10px] font-mono font-black px-2 py-0.5 rounded uppercase ${
+                    topPriorityAlert.severity === 'critical'
+                      ? 'bg-rose-500 text-white'
+                      : 'bg-[#FF8C00] text-black'
+                  }`}
+                >
+                  {topPriorityAlert.severity}
+                </span>
+                <span
+                  className={`text-xs font-mono font-black uppercase tracking-wider ${
+                    topPriorityAlert.severity === 'critical' ? 'text-rose-400' : 'text-[#FF8C00]'
+                  }`}
+                >
+                  {pendingAlerts.length} UNREVIEWED ALERT{pendingAlerts.length > 1 ? 'S' : ''}
                 </span>
                 <span className="text-xs font-mono text-slate-400">·</span>
                 <span className="text-xs font-mono text-white font-bold">
-                  {alerts[0]?.title}
+                  {topPriorityAlert.title}
                 </span>
               </div>
               <p className="text-xs text-slate-300 font-sans mt-0.5">
-                {alerts[0]?.description}
+                {topPriorityAlert.description}
               </p>
             </div>
           </div>
@@ -270,10 +289,10 @@ export const DashboardOverviewPage: React.FC<DashboardOverviewPageProps> = ({
           <div className="flex items-center gap-2.5 shrink-0 font-mono text-xs">
             <button
               type="button"
-              onClick={() => onSelectAstronaut(alerts[0]?.astronautId || 'ASTRO-74-SJ')}
+              onClick={() => onSelectAstronaut(topPriorityAlert.astronautId)}
               className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white font-bold cursor-pointer"
             >
-              OPEN {alerts[0]?.astronautCallsign || 'ASTRONAUT'} DOSSIER
+              OPEN {topPriorityAlert.astronautCallsign.toUpperCase()} DOSSIER
             </button>
             <button
               type="button"
@@ -284,6 +303,22 @@ export const DashboardOverviewPage: React.FC<DashboardOverviewPageProps> = ({
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
+        </div>
+      ) : alerts.length > 0 && (
+        <div className="glass-panel rounded-2xl p-3.5 border border-emerald-500/30 bg-emerald-950/15 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 font-mono text-xs">
+          <div className="flex items-center gap-2.5 text-emerald-300">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>
+              All <strong>{alerts.length}</strong> clinical alerts have been reviewed and signed off by the Flight Surgeon.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigateTab('alerts')}
+            className="text-[#00E5FF] hover:underline font-bold cursor-pointer shrink-0"
+          >
+            OPEN MEDICAL ALERTS LOG →
+          </button>
         </div>
       )}
 
@@ -328,124 +363,147 @@ export const DashboardOverviewPage: React.FC<DashboardOverviewPageProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {crew
-              .filter((member) => crewStatusFilter === 'all' || member.healthStatus === crewStatusFilter)
-              .map((member) => {
-                const isSelected = member.id === profile.id;
-                const isAttention = member.healthStatus === 'monitoring' || member.healthStatus === 'critical';
+            {filteredCrew.length === 0 ? (
+              <div className="md:col-span-2 glass-panel rounded-2xl p-8 border border-slate-800 text-center space-y-3">
+                <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+                <div className="text-sm font-bold text-white font-['Chakra_Petch',sans-serif]">
+                  No Crew Members in "{crewStatusFilter.toUpperCase()}" Status
+                </div>
+                <p className="text-xs text-slate-400 font-mono">
+                  All Expedition 74 astronauts are currently operating outside this filter tier.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setCrewStatusFilter('all')}
+                  className="px-4 py-1.5 rounded-xl bg-[#00E5FF]/15 border border-[#00E5FF]/40 text-[#00E5FF] font-mono text-xs font-bold hover:bg-[#00E5FF]/25 cursor-pointer"
+                >
+                  SHOW ALL CREW ({totalAstronauts})
+                </button>
+              </div>
+            ) : (
+              filteredCrew.map((member) => {
+                const isCritical = member.healthStatus === 'critical';
+                const isMonitoring = member.healthStatus === 'monitoring';
 
                 return (
                   <div
                     key={member.id}
                     onClick={() => onSelectAstronaut(member.id)}
                     className={`glass-panel rounded-2xl p-4.5 border transition-all cursor-pointer relative group ${
-                      member.healthStatus === 'critical'
+                      isCritical
                         ? 'border-rose-500 hover:border-rose-400 shadow-[0_0_25px_rgba(244,63,94,0.25)]'
-                        : isAttention
+                        : isMonitoring
                         ? 'border-[#FF8C00]/50 hover:border-[#FF8C00] shadow-[0_0_20px_rgba(255,140,0,0.2)]'
                         : 'border-slate-800 hover:border-[#00E5FF]/60 hover:shadow-[0_0_20px_rgba(0,229,255,0.25)]'
                     }`}
                   >
-                  {/* Astronaut Header */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
-                        {member.photoUrl ? (
-                          <img
-                            src={member.photoUrl}
-                            alt={member.name}
-                            className="w-12 h-12 rounded-xl object-cover border border-[#00E5FF]/50 shadow-md"
+                    {/* Astronaut Header */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          {member.photoUrl ? (
+                            <img
+                              src={member.photoUrl}
+                              alt={member.name}
+                              className="w-12 h-12 rounded-xl object-cover border border-[#00E5FF]/50 shadow-md"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-[#00E5FF] font-['Chakra_Petch',sans-serif]">
+                              {member.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                            </div>
+                          )}
+                          <span
+                            className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-black ${
+                              isCritical ? 'bg-rose-500 animate-pulse' : isMonitoring ? 'bg-[#FF8C00]' : 'bg-[#10b981]'
+                            }`}
                           />
-                        ) : (
-                          <div className="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-[#00E5FF] font-['Chakra_Petch',sans-serif]">
-                            {member.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                        </div>
+                        <div>
+                          <div className="font-bold text-white text-sm font-['Chakra_Petch',sans-serif] group-hover:text-[#00E5FF] transition-colors flex items-center gap-1.5">
+                            {member.name}
                           </div>
-                        )}
-                        <span
-                          className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-black ${
-                            isAttention ? 'bg-[#FF8C00]' : 'bg-[#10b981]'
-                          }`}
-                        />
-                      </div>
-                      <div>
-                        <div className="font-bold text-white text-sm font-['Chakra_Petch',sans-serif] group-hover:text-[#00E5FF] transition-colors flex items-center gap-1.5">
-                          {member.name}
-                        </div>
-                        <div className="text-[11px] font-mono text-slate-400">
-                          {member.id} · <span className="text-[#00E5FF] font-semibold">{member.callsign}</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 truncate max-w-[190px]">
-                          {member.role}
+                          <div className="text-[11px] font-mono text-slate-400">
+                            {member.id} · <span className="text-[#00E5FF] font-semibold">{member.callsign}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 truncate max-w-[190px]">
+                            {member.role}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <span
-                      className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase tracking-wider ${
-                        isAttention
-                          ? 'bg-[#FF8C00]/20 text-[#FF8C00] border border-[#FF8C00]/50'
-                          : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                      }`}
-                    >
-                      {member.healthStatus}
-                    </span>
-                  </div>
-
-                  {/* Vitals Pill Row */}
-                  <div className="grid grid-cols-4 gap-2 mt-4 pt-3 border-t border-slate-800 text-center font-mono">
-                    <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
-                      <div className="text-[9px] text-slate-400 uppercase">HEART RATE</div>
-                      <div className={`text-sm font-bold ${member.heartRate > 70 ? 'text-[#FF8C00]' : 'text-white'}`}>
-                        {member.heartRate} <span className="text-[9px]">bpm</span>
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
-                      <div className="text-[9px] text-slate-400 uppercase">BLOOD O₂</div>
-                      <div className="text-sm font-bold text-emerald-300">
-                        {member.spO2}%
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
-                      <div className="text-[9px] text-slate-400 uppercase">BP SYS/DIA</div>
-                      <div className="text-sm font-bold text-white">
-                        {member.bloodPressure}
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
-                      <div className="text-[9px] text-slate-400 uppercase">TEMP</div>
-                      <div className="text-sm font-bold text-white">
-                        {member.temperature}°C
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Clinical Indicators */}
-                  <div className="mt-3 text-[11px] font-mono space-y-1">
-                    <div className="flex justify-between text-slate-300">
-                      <span className="text-slate-500">Symptom:</span>
-                      <span className={member.latestSymptom?.includes('Lumbar') ? 'text-[#FF8C00] font-semibold' : 'text-slate-300'}>
-                        {member.latestSymptom || 'None'}
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase tracking-wider ${
+                          isCritical
+                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/50'
+                            : isMonitoring
+                            ? 'bg-[#FF8C00]/20 text-[#FF8C00] border border-[#FF8C00]/50'
+                            : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                        }`}
+                      >
+                        {member.healthStatus}
                       </span>
                     </div>
-                    <div className="flex justify-between text-slate-300">
-                      <span className="text-slate-500">Active Restrictions:</span>
-                      <span className={member.activeRestrictionsCount > 0 ? 'text-rose-400 font-bold' : 'text-emerald-400'}>
-                        {member.activeRestrictionsCount > 0 ? `${member.activeRestrictionsCount} Restrictions` : 'Cleared'}
-                      </span>
+
+                    {/* Vitals Pill Row */}
+                    <div className="grid grid-cols-4 gap-2 mt-4 pt-3 border-t border-slate-800 text-center font-mono">
+                      <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                        <div className="text-[9px] text-slate-400 uppercase">HEART RATE</div>
+                        <div className={`text-sm font-bold ${member.heartRate > 70 ? 'text-[#FF8C00]' : 'text-white'}`}>
+                          {member.heartRate} <span className="text-[9px]">bpm</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                        <div className="text-[9px] text-slate-400 uppercase">BLOOD O₂</div>
+                        <div className="text-sm font-bold text-emerald-300">
+                          {member.spO2}%
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                        <div className="text-[9px] text-slate-400 uppercase">BP SYS/DIA</div>
+                        <div className="text-sm font-bold text-white">
+                          {member.bloodPressure}
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                        <div className="text-[9px] text-slate-400 uppercase">TEMP</div>
+                        <div className="text-sm font-bold text-white">
+                          {member.temperature}°C
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Clinical Indicators */}
+                    <div className="mt-3 text-[11px] font-mono space-y-1">
+                      <div className="flex justify-between text-slate-300 gap-2">
+                        <span className="text-slate-500 shrink-0">Symptom:</span>
+                        <span className={`truncate ${member.latestSymptom?.includes('Lumbar') ? 'text-[#FF8C00] font-semibold' : 'text-slate-300'}`}>
+                          {member.latestSymptom || 'None'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-slate-300">
+                        <span className="text-slate-500">Active Restrictions:</span>
+                        <span className={member.activeRestrictionsCount > 0 ? 'text-rose-400 font-bold' : 'text-emerald-400'}>
+                          {member.activeRestrictionsCount > 0 ? `${member.activeRestrictionsCount} Restrictions` : 'Cleared'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-slate-400 text-[10px]">
+                        <span className="text-slate-500">Last Downlink:</span>
+                        <span>{member.lastMeasurementTime}</span>
+                      </div>
+                    </div>
+
+                    {/* Click to open dossier banner */}
+                    <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono text-[#00E5FF] group-hover:translate-x-1 transition-transform">
+                      <span className="font-bold">OPEN MEDICAL DOSSIER</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
                     </div>
                   </div>
-
-                  {/* Click to open dossier banner */}
-                  <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono text-[#00E5FF] group-hover:translate-x-1 transition-transform">
-                    <span className="font-bold">OPEN MEDICAL DOSSIER</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
 
           {/* Active Restrictions Triage List */}
@@ -460,41 +518,47 @@ export const DashboardOverviewPage: React.FC<DashboardOverviewPageProps> = ({
               <button
                 type="button"
                 onClick={() => onNavigateTab('restrictions')}
-                className="text-xs font-mono text-rose-300 hover:underline font-bold"
+                className="text-xs font-mono text-rose-300 hover:underline font-bold cursor-pointer"
               >
                 RESTRICTION CONSOLE →
               </button>
             </div>
 
-            <div className="space-y-2.5">
-              {activeRestrictions.map((res) => (
-                <div
-                  key={res.id}
-                  className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs font-mono"
-                >
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/40 uppercase">
-                        {res.severity}
-                      </span>
-                      <span className="font-bold text-white">{res.name}</span>
-                      <span className="text-slate-400">· {res.astronautName}</span>
+            {activeRestrictions.length === 0 ? (
+              <div className="p-3.5 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-xs font-mono text-emerald-300">
+                All Expedition 74 astronauts are cleared with zero active countermeasure holds.
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {activeRestrictions.map((res) => (
+                  <div
+                    key={res.id}
+                    className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs font-mono"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/40 uppercase">
+                          {res.severity}
+                        </span>
+                        <span className="font-bold text-white">{res.name}</span>
+                        <span className="text-slate-400">· {res.astronautName}</span>
+                      </div>
+                      <div className="text-slate-300 font-sans text-xs">
+                        {res.description}
+                      </div>
                     </div>
-                    <div className="text-slate-300 font-sans text-xs">
-                      {res.description}
+                    <div className="text-right shrink-0">
+                      <div className="text-[11px] text-rose-300 font-bold">
+                        {res.restrictedExercises.join(', ')}
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        Prescribed: {res.effectiveDate}
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-[11px] text-rose-300 font-bold">
-                      {res.restrictedExercises.join(', ')}
-                    </div>
-                    <div className="text-[10px] text-slate-500">
-                      Prescribed: {res.effectiveDate}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -515,7 +579,7 @@ export const DashboardOverviewPage: React.FC<DashboardOverviewPageProps> = ({
             </div>
 
             <p className="text-[11px] text-slate-300 mb-3 font-sans">
-              Resting heart rate delta: <strong className="text-[#FF8C00]">+{vitals ? vitals.heartRate - profile.restingHeartRate : 14} bpm</strong> over {profile.restingHeartRate} bpm baseline, reflecting sleep fragmentation in microG.
+              Resting heart rate delta: <strong className="text-[#FF8C00]">{hrDelta >= 0 ? `+${hrDelta}` : hrDelta} bpm</strong> over {profile.restingHeartRate} bpm baseline, reflecting sleep fragmentation in microG.
             </p>
 
             <div className="h-44 w-full">

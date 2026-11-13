@@ -1,122 +1,34 @@
-import React, { useState, useRef, Suspense, useMemo } from 'react';
-import { Canvas, useThree, useFrame, useLoader } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
+import { Canvas, useThree, useFrame } from '@react-three/fiber';
+import { OrbitControls, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import {
-  Activity,
-  AlertTriangle,
-  CheckCircle,
-  Layers,
-  Sparkles,
-  Search,
-  X,
+import { 
+  Activity, 
+  AlertTriangle, 
+  CheckCircle, 
+  Trash2, 
+  Plus, 
+  Flame, 
+  ShieldAlert, 
+  RotateCcw, 
+  Layers, 
   Info,
-  Eye,
-  EyeOff,
+  Sparkles,
   Sliders,
-  Plus,
+  Check
 } from 'lucide-react';
-import { AstronautProfile } from '../types/astronaut.ts';
+import { SymptomReport, AstronautProfile } from '../types/astronaut.ts';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-const ECORCHE_MODEL_URL = '/models/ecorche-main/model/ecorche.meshopt.glb';
+const BODY_MODEL_URL = '/models/body_superficial.app5m.glb';
 
-// ─── Aerospace clinical notes per mesh name ───────────────────────────────────
-function getAerospaceNote(name: string, tissue: string): string {
-  const n = name.toLowerCase();
-
-  // Spinal column
-  if (n.includes('vertebra') || n.includes('intervertebral') || n.includes('atlas') || n.includes('axis') || n.includes('sacrum') || n.includes('coccyx') || n.includes('disc'))
-    return 'Microgravity causes spinal elongation of +2–5 cm in long-duration missions due to intervertebral disc expansion. Monitor for disc herniation risk. Axial loading exercises (ARED squats/deadlifts) require Flight Surgeon clearance.';
-
-  // Deep postural stabilisers
-  if (n.includes('multifidus') || n.includes('erector spinae') || n.includes('transversospinal'))
-    return 'Deep postural stabiliser muscles weaken rapidly in microgravity. Targeted resistance exercise (ARED, resistive bands) is prescribed from mission day 1 to counteract atrophy.';
-
-  if (n.includes('psoas') || n.includes('iliacus') || n.includes('quadratus lumborum'))
-    return 'Hip flexors and lumbar stabilisers are under-loaded in microgravity, leading to tightening and atrophy. Stretching and eccentric loading are prescribed countermeasures.';
-
-  // Skull / cranial
-  if (tissue === 'bone' && (n.includes('skull') || n.includes('frontal') || n.includes('parietal') || n.includes('occipital') || n.includes('temporal') || n.includes('sphenoid')))
-    return 'Cephalic fluid shift in microgravity increases intracranial pressure, causing fullness, nasal congestion and visual disturbances. VIIP syndrome monitoring is mandatory.';
-
-  // Eyes
-  if (tissue === 'eye' || n.includes('eye') || n.includes('ocular'))
-    return 'VIIP Syndrome: elevated intracranial pressure causes optic disc oedema, globe flattening and choroidal folds in ~70% of long-duration ISS crew. Routine ophthalmic monitoring every 30 days.';
-
-  // Rotator cuff / shoulder
-  if (n.includes('rotator') || n.includes('supraspinatus') || n.includes('infraspinatus') || n.includes('teres') || n.includes('subscapularis'))
-    return 'Rotator cuff structures are under high load during EVA spacesuit donning/doffing and translation on the ISS exterior. Shoulder impingement is the leading EVA-related injury.';
-
-  if (n.includes('deltoid') || n.includes('clavicle') || n.includes('acromion') || n.includes('scapula') || n.includes('trapezius'))
-    return 'Shoulder girdle muscles work intensively during spacewalks. Microtrauma accumulates across EVAs. Pre/post EVA imaging recommended after every 3 EVAs.';
-
-  // Arms
-  if (n.includes('bicep') || n.includes('tricep') || n.includes('brachial') || n.includes('forearm') || n.includes('radius') || n.includes('ulna'))
-    return 'Upper limb musculature atrophies in microgravity despite EVA workload. ARED and resistive band protocols target upper arm preservation.';
-
-  // Hands / wrists
-  if (n.includes('hand') || n.includes('wrist') || n.includes('carpal') || n.includes('metacarpal') || n.includes('phalanx') || n.includes('finger'))
-    return 'Glove-induced compression during EVA causes hand fatigue, numbness and grip-strength loss. Degloved hand neuropathy is a reported risk. Post-EVA grip testing is standard.';
-
-  // Chest / thorax
-  if (n.includes('rib') || n.includes('sternum') || n.includes('thorac') || n.includes('intercostal') || n.includes('pectoralis'))
-    return 'Thoracic expansion is restricted by EVA suit pressure. Barotrauma risk during rapid decompression. Chest tightness should be reported immediately.';
-
-  // Heart / cardiovascular
-  if (n.includes('heart') || n.includes('cardiac') || n.includes('aorta') || n.includes('ventricle') || n.includes('atrium'))
-    return 'Cardiovascular deconditioning is a primary concern in microgravity. Cardiac mass decreases ~10%, stroke volume drops, and orthostatic intolerance develops. Daily aerobic countermeasures (CEVIS ergometer, 2.5 h/day) are mandatory.';
-
-  // Lungs
-  if (n.includes('lung') || n.includes('bronch') || n.includes('pulmonary') || n.includes('trachea') || n.includes('larynx') || n.includes('diaphragm'))
-    return 'Pulmonary function is altered in microgravity: uniform ventilation/perfusion distribution changes gas exchange. SpO₂ monitoring continuous during EVA. Diaphragm displacement cranially increases residual volume.';
-
-  // Abdomen / core
-  if (n.includes('rectus abdominis') || n.includes('oblique') || n.includes('transverse abdominis') || n.includes('abdomen'))
-    return 'Core musculature is significantly undertaxed in microgravity. Targeted core stabilisation exercises are essential to prevent lumbar injury during mission. Intra-abdominal pressure changes affect spinal biomechanics.';
-
-  // GI tract
-  if (n.includes('intestine') || n.includes('colon') || n.includes('stomach') || n.includes('liver') || n.includes('pancreas') || n.includes('spleen'))
-    return 'Gastrointestinal motility decreases in microgravity. Constipation, bloating and altered nutrient absorption are common. Dietary fibre and fluid intake are closely monitored.';
-
-  // Kidneys
-  if (n.includes('kidney') || n.includes('renal') || n.includes('ureter') || n.includes('bladder'))
-    return 'Increased calcium excretion in microgravity raises kidney stone risk (10× higher than Earth baseline). Fluid intake >2.5 L/day is mandatory. Ultrasound screening every 90 days.';
-
-  // Leg muscles
-  if (n.includes('quadricep') || n.includes('hamstring') || n.includes('vastus') || n.includes('rectus femoris') || n.includes('sartorius'))
-    return 'Lower extremity muscle mass decreases ~15–20% over 6-month missions. ARED lower-body protocols (squats, deadlifts, leg press) target preservation. Sarcopenia is monitored via DEXA scans.';
-
-  // Calves / feet
-  if (n.includes('gastrocnemius') || n.includes('soleus') || n.includes('tibialis') || n.includes('calf') || n.includes('achilles') || n.includes('foot') || n.includes('plantar'))
-    return 'Plantar fascia and Achilles tendon undergo rapid unloading in microgravity, increasing injury risk on return. Vibration plate therapy and resistive exercise prescribed. Foot pain post-landing is common during readaptation.';
-
-  // Bone (generic)
-  if (tissue === 'bone' || n.includes('bone') || n.includes('femur') || n.includes('tibia') || n.includes('fibula') || n.includes('humerus'))
-    return 'Bone density decreases ~1–2% per month in microgravity (compared to 1–1.5% per year in osteoporosis). Load-bearing exercise is essential. Bisphosphonate therapy may be indicated for missions >6 months.';
-
-  // Arteries / veins
-  if (n.includes('artery') || n.includes('vein') || n.includes('vessel') || n.includes('vascular'))
-    return 'Vascular remodelling occurs in microgravity with reduced venous return and peripheral vasoconstriction. Lower body negative pressure (LBNP) is used as a countermeasure for orthostatic intolerance.';
-
-  // Lymphatic / immune
-  if (n.includes('lymph') || n.includes('thymus') || n.includes('spleen') || n.includes('immune'))
-    return 'Immune dysregulation in space includes T-cell redistribution, viral reactivation (EBV, CMV, VZV) and altered cytokine profiles. Latent herpesvirus monitoring is conducted monthly.';
-
-  // Nerves
-  if (n.includes('nerve') || n.includes('neural') || n.includes('plexus') || n.includes('sciatic'))
-    return 'Space motion sickness (SMS) affects ~70% of crew in first 72 hours due to vestibular-visual conflict. Sensorimotor adaptation training pre-flight reduces severity.';
-
-  // Generic muscle
-  if (tissue === 'muscle' || n.includes('muscle') || n.includes('tendon') || n.includes('ligament'))
-    return 'Skeletal muscle atrophy begins within 48 hours of microgravity exposure. Combined aerobic and resistance exercise (2.5 h/day) is prescribed. Protein intake ≥1.5 g/kg/day is recommended.';
-
-  return `Anatomical structure: ${name}. Click to report discomfort to your Flight Surgeon. All symptoms are logged in the ASTROCARE telemetry database for real-time medical review.`;
+// Preload the body model from local static storage
+try {
+  useGLTF.preload(BODY_MODEL_URL);
+} catch {
+  // Preload safety catch
 }
 
-// ─── Error Boundary ───────────────────────────────────────────────────────────
+// React Error Boundary for 3D body mesh loading
 class ModelErrorBoundary extends React.Component<
   { fallback: React.ReactNode; children: React.ReactNode },
   { hasError: boolean }
@@ -129,563 +41,733 @@ class ModelErrorBoundary extends React.Component<
     return { hasError: true };
   }
   componentDidCatch(err: any) {
-    console.warn('3D body model failed to render:', err?.message);
+    console.warn('3D body model failed to render, switching to procedural anatomical fallback:', err?.message);
   }
   render() {
-    if (this.state.hasError) return this.props.fallback;
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
     return this.props.children;
   }
 }
 
-// ─── Camera fly-to helper ─────────────────────────────────────────────────────
-function CameraFlyTo({ target }: { target: THREE.Object3D | null }) {
-  const { camera, controls } = useThree();
-  const flyRef = useRef<{ p0: THREE.Vector3; p1: THREE.Vector3; c0: THREE.Vector3; c1: THREE.Vector3; t0: number } | null>(null);
+// Map 3D coordinate heights or mesh names to anatomical clinical space labels
+function mapMeshToBodyPart(point: THREE.Vector3, meshName: string): string {
+  const y = point.y;
+  const x = point.x;
+  const z = point.z;
 
-  useMemo(() => {
-    if (!target) return;
-    const box = new THREE.Box3().setFromObject(target);
-    const c = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3()).length();
-    const r = size * 0.6;
-    const fovRad = THREE.MathUtils.degToRad(30 / 2);
-    const dist = r / Math.tan(fovRad);
-    const p1 = c.clone().add(new THREE.Vector3(0, 0, dist));
-    flyRef.current = {
-      p0: camera.position.clone(),
-      p1,
-      c0: (controls as any)?.target?.clone() ?? new THREE.Vector3(0, 0.9, 0),
-      c1: c,
-      t0: performance.now(),
-    };
-  }, [target]);
-
-  useFrame(() => {
-    if (!flyRef.current) return;
-    const elapsed = (performance.now() - flyRef.current.t0) / 600;
-    const e = Math.min(elapsed, 1);
-    camera.position.lerpVectors(flyRef.current.p0, flyRef.current.p1, e);
-    if ((controls as any)?.target) {
-      (controls as any).target.lerpVectors(flyRef.current.c0, flyRef.current.c1, e);
+  // Height-based anatomical zones (normalized around standard body height in Three.js)
+  if (y > 1.35) {
+    return 'Cranial / Sinus (Cephalic Fluid Shift Area)';
+  } else if (y > 1.15) {
+    return 'Cervical Spine & Trapezius';
+  } else if (y > 0.75) {
+    if (Math.abs(x) > 0.35) {
+      return x > 0 ? 'Right Shoulder / Deltoid' : 'Left Shoulder / Deltoid';
     }
-    if (e >= 1) flyRef.current = null;
+    return z > 0 ? 'Thoracic Chest / Sternum' : 'Thoracic Spine (Intervertebral Decompression)';
+  } else if (y > 0.35) {
+    if (Math.abs(x) > 0.4) {
+      return x > 0 ? 'Right Forearm / Wrist' : 'Left Forearm / Wrist';
+    }
+    return z > 0 ? 'Abdominal Wall' : 'Lumbar Spine (L1-L5 Microgravity Delta)';
+  } else if (y > -0.15) {
+    return 'Pelvic / Sacral Region';
+  } else if (y > -0.85) {
+    return x > 0 ? 'Right Femoral / Quadriceps' : 'Left Femoral / Quadriceps';
+  } else {
+    return x > 0 ? 'Right Tibia / Lower Ankle' : 'Left Tibia / Lower Ankle';
+  }
+}
+
+export interface AnatomicalZone {
+  id: string;
+  label: string;
+  position: [number, number, number];
+  rotation?: [number, number, number];
+  type: 'box' | 'cylinder' | 'sphere';
+  args: any[];
+}
+
+export const ANATOMICAL_ZONES: AnatomicalZone[] = [
+  {
+    id: 'cranial',
+    label: 'Cranial / Sinus (Cephalic Fluid Shift Area)',
+    position: [0, 1.48, 0.02],
+    type: 'sphere',
+    args: [0.24, 16, 16],
+  },
+  {
+    id: 'cervical',
+    label: 'Cervical Spine & Neck',
+    position: [0, 1.18, 0],
+    type: 'cylinder',
+    args: [0.12, 0.13, 0.16, 16],
+  },
+  {
+    id: 'chest',
+    label: 'Thoracic Chest & Sternum',
+    position: [0, 0.88, 0.08],
+    type: 'box',
+    args: [0.42, 0.35, 0.22],
+  },
+  {
+    id: 'spine',
+    label: 'Lumbar Spine (L1-L5 Microgravity Delta)',
+    position: [0, 0.58, -0.09],
+    type: 'box',
+    args: [0.22, 0.52, 0.16],
+  },
+  {
+    id: 'abdomen',
+    label: 'Abdominal Wall',
+    position: [0, 0.54, 0.08],
+    type: 'box',
+    args: [0.38, 0.32, 0.2],
+  },
+  {
+    id: 'pelvis',
+    label: 'Pelvic / Sacral Region',
+    position: [0, 0.18, 0],
+    type: 'box',
+    args: [0.42, 0.28, 0.24],
+  },
+  {
+    id: 'left_shoulder',
+    label: 'Left Shoulder & Deltoid',
+    position: [-0.42, 0.82, 0],
+    rotation: [0, 0, -0.15],
+    type: 'cylinder',
+    args: [0.1, 0.09, 0.38, 16],
+  },
+  {
+    id: 'right_shoulder',
+    label: 'Right Shoulder & Deltoid',
+    position: [0.42, 0.82, 0],
+    rotation: [0, 0, 0.15],
+    type: 'cylinder',
+    args: [0.1, 0.09, 0.38, 16],
+  },
+  {
+    id: 'left_forearm',
+    label: 'Left Forearm & Wrist',
+    position: [-0.48, 0.36, 0],
+    type: 'cylinder',
+    args: [0.08, 0.07, 0.44, 16],
+  },
+  {
+    id: 'right_forearm',
+    label: 'Right Forearm & Wrist',
+    position: [0.48, 0.36, 0],
+    type: 'cylinder',
+    args: [0.08, 0.07, 0.44, 16],
+  },
+  {
+    id: 'left_thigh',
+    label: 'Left Femoral / Quadriceps',
+    position: [-0.18, -0.32, 0],
+    type: 'cylinder',
+    args: [0.14, 0.11, 0.65, 16],
+  },
+  {
+    id: 'right_thigh',
+    label: 'Right Femoral / Quadriceps',
+    position: [0.18, -0.32, 0],
+    type: 'cylinder',
+    args: [0.14, 0.11, 0.65, 16],
+  },
+  {
+    id: 'left_shin',
+    label: 'Left Tibia / Calves & Ankle',
+    position: [-0.20, -1.02, 0],
+    type: 'cylinder',
+    args: [0.1, 0.08, 0.7, 16],
+  },
+  {
+    id: 'right_shin',
+    label: 'Right Tibia / Calves & Ankle',
+    position: [0.20, -1.02, 0],
+    type: 'cylinder',
+    args: [0.1, 0.08, 0.7, 16],
+  },
+];
+
+interface BodyModelProps {
+  selectedMeshId: string | null;
+  onSelectRegion: (bodyPart: string, meshId: string, point: THREE.Vector3) => void;
+  hoveredPart: string | null;
+  setHoveredPart: (part: string | null) => void;
+  hoveredZoneId: string | null;
+  setHoveredZoneId: (id: string | null) => void;
+  selectedZoneId: string | null;
+  setSelectedZoneId: (id: string | null) => void;
+}
+
+function BodyModel({
+  selectedMeshId,
+  onSelectRegion,
+  hoveredPart,
+  setHoveredPart,
+  hoveredZoneId,
+  setHoveredZoneId,
+  selectedZoneId,
+  setSelectedZoneId,
+}: BodyModelProps) {
+  const gltf = useGLTF(BODY_MODEL_URL);
+  const modelRef = useRef<THREE.Group | null>(null);
+
+  // Holographic cybernetic baseline material for the underlying anatomical mesh
+  const clonedScene = React.useMemo(() => {
+    const clone = gltf.scene.clone(true);
+    clone.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        mesh.material = new THREE.MeshStandardMaterial({
+          color: '#00e5ff',
+          roughness: 0.2,
+          metalness: 0.8,
+          wireframe: false,
+          transparent: true,
+          opacity: 0.65,
+          emissive: '#002b40',
+          emissiveIntensity: 0.4,
+        });
+      }
+    });
+    return clone;
+  }, [gltf.scene]);
+
+  // Subtle breathing animation for body
+  useFrame((state) => {
+    if (modelRef.current) {
+      const t = state.clock.getElapsedTime();
+      modelRef.current.position.y = -0.65 + Math.sin(t * 1.2) * 0.015;
+    }
   });
 
-  return null;
-}
-
-// ─── Écorché 3D Model ─────────────────────────────────────────────────────────
-// IMPORTANT: render gltf.scene directly as a <primitive> to preserve the root
-// node's scale=0.0001 (positions stored in 0.1 mm units). Extracting meshes
-// and re-rendering them individually breaks the hierarchy and makes the model
-// appear 10,000× too large.
-
-interface EcorcheModelProps {
-  layer: 'both' | 'muscles' | 'skeleton';
-  xrayOpacity: number;
-  selectedMesh: THREE.Mesh | null;
-  hoveredMesh: THREE.Mesh | null;
-  onMeshClick: (mesh: THREE.Mesh) => void;
-  onMeshHover: (mesh: THREE.Mesh | null) => void;
-  searchTarget: THREE.Object3D | null;
-}
-
-function EcorcheModel({
-  layer,
-  xrayOpacity,
-  selectedMesh,
-  hoveredMesh,
-  onMeshClick,
-  onMeshHover,
-  searchTarget,
-}: EcorcheModelProps) {
-  const gltf = useLoader(
-    GLTFLoader,
-    ECORCHE_MODEL_URL,
-    (loader) => {
-      (loader as any).setMeshoptDecoder(MeshoptDecoder);
-    }
-  );
-
-  // Clone scene once so material overrides don't mutate the cached original
-  const scene = useMemo(() => gltf.scene.clone(true), [gltf]);
-
-  // Apply layer visibility + material overrides on every render
-  useMemo(() => {
-    scene.traverse((obj) => {
-      if (!(obj as THREE.Mesh).isMesh) return;
-      const mesh = obj as THREE.Mesh;
-      const ud = mesh.userData as { layer?: string; tissue?: string };
-      const tissue = ud.tissue ?? 'muscle';
-      const meshLayer = (ud.layer ?? 'superficial muscles').toLowerCase();
-
-      // Layer visibility
-      if (layer === 'muscles') mesh.visible = tissue !== 'bone' && tissue !== 'cartilage' && tissue !== 'tooth';
-      else if (layer === 'skeleton') mesh.visible = tissue === 'bone' || tissue === 'cartilage' || tissue === 'tooth';
-      else mesh.visible = true;
-
-      // Material override
-      const isBone = tissue === 'bone' || tissue === 'cartilage' || tissue === 'tooth';
-      const isSelected = selectedMesh?.uuid === mesh.uuid;
-      const isHovered = hoveredMesh?.uuid === mesh.uuid;
-
-      const color = isSelected ? '#00E5FF' : isHovered ? '#FF8C00' : (isBone ? '#e8d5b0' : '#c0392b');
-      const opacity = isSelected ? 1.0 : isBone ? xrayOpacity * 0.9 : xrayOpacity;
-      const transparent = opacity < 0.99;
-
-      const mat = new THREE.MeshStandardMaterial({
-        color,
-        transparent,
-        opacity,
-        roughness: isBone ? 0.75 : 0.5,
-        metalness: isBone ? 0.05 : 0.0,
-        side: THREE.DoubleSide,
-        depthWrite: !transparent || opacity > 0.6,
-      });
-      mesh.material = mat;
-    });
-  }, [scene, layer, xrayOpacity, selectedMesh, hoveredMesh]);
-
-  const handleClick = (e: any) => {
-    e.stopPropagation();
-    const hit = e.intersections?.[0]?.object as THREE.Mesh | undefined;
-    if (hit?.isMesh) onMeshClick(hit);
-  };
-
-  const handlePointerOver = (e: any) => {
-    e.stopPropagation();
-    const hit = e.intersections?.[0]?.object as THREE.Mesh | undefined;
-    if (hit?.isMesh) {
-      onMeshHover(hit);
-      document.body.style.cursor = 'pointer';
-    }
-  };
-
-  const handlePointerOut = () => {
-    onMeshHover(null);
-    document.body.style.cursor = 'default';
-  };
-
   return (
-    <>
-      <primitive
-        object={scene}
-        onClick={handleClick}
-        onPointerOver={handlePointerOver}
-        onPointerOut={handlePointerOut}
-      />
-      <CameraFlyTo target={searchTarget} />
-    </>
-  );
-}
+    <group ref={modelRef} position={[0, -0.65, 0]} scale={1.35}>
+      {/* 1. Underlying High-Tech Translucent Holographic Anatomical Body */}
+      <primitive object={clonedScene} />
 
-// ─── Fallback Procedural Body ─────────────────────────────────────────────────
-function ProceduralBody({ onPartClick }: { onPartClick: (name: string) => void }) {
-  const parts = [
-    { name: 'Head', geo: <sphereGeometry args={[0.13, 16, 16]} />, pos: [0, 1.72, 0] as [number,number,number] },
-    { name: 'Neck', geo: <cylinderGeometry args={[0.055, 0.065, 0.14, 12]} />, pos: [0, 1.56, 0] as [number,number,number] },
-    { name: 'Torso (Chest/Spine)', geo: <boxGeometry args={[0.38, 0.55, 0.22]} />, pos: [0, 1.2, 0] as [number,number,number] },
-    { name: 'Abdomen', geo: <boxGeometry args={[0.33, 0.28, 0.2]} />, pos: [0, 0.87, 0] as [number,number,number] },
-    { name: 'Pelvis', geo: <boxGeometry args={[0.35, 0.18, 0.2]} />, pos: [0, 0.67, 0] as [number,number,number] },
-    { name: 'Left Shoulder', geo: <sphereGeometry args={[0.07, 12, 12]} />, pos: [-0.26, 1.42, 0] as [number,number,number] },
-    { name: 'Right Shoulder', geo: <sphereGeometry args={[0.07, 12, 12]} />, pos: [0.26, 1.42, 0] as [number,number,number] },
-    { name: 'Left Upper Arm', geo: <cylinderGeometry args={[0.04, 0.045, 0.28, 10]} />, pos: [-0.33, 1.2, 0] as [number,number,number] },
-    { name: 'Right Upper Arm', geo: <cylinderGeometry args={[0.04, 0.045, 0.28, 10]} />, pos: [0.33, 1.2, 0] as [number,number,number] },
-    { name: 'Left Forearm', geo: <cylinderGeometry args={[0.033, 0.038, 0.26, 10]} />, pos: [-0.38, 0.9, 0] as [number,number,number] },
-    { name: 'Right Forearm', geo: <cylinderGeometry args={[0.033, 0.038, 0.26, 10]} />, pos: [0.38, 0.9, 0] as [number,number,number] },
-    { name: 'Left Hand', geo: <boxGeometry args={[0.07, 0.1, 0.03]} />, pos: [-0.4, 0.68, 0] as [number,number,number] },
-    { name: 'Right Hand', geo: <boxGeometry args={[0.07, 0.1, 0.03]} />, pos: [0.4, 0.68, 0] as [number,number,number] },
-    { name: 'Left Thigh', geo: <cylinderGeometry args={[0.07, 0.065, 0.42, 12]} />, pos: [-0.1, 0.35, 0] as [number,number,number] },
-    { name: 'Right Thigh', geo: <cylinderGeometry args={[0.07, 0.065, 0.42, 12]} />, pos: [0.1, 0.35, 0] as [number,number,number] },
-    { name: 'Left Knee', geo: <sphereGeometry args={[0.055, 12, 12]} />, pos: [-0.1, 0.1, 0] as [number,number,number] },
-    { name: 'Right Knee', geo: <sphereGeometry args={[0.055, 12, 12]} />, pos: [0.1, 0.1, 0] as [number,number,number] },
-    { name: 'Left Lower Leg', geo: <cylinderGeometry args={[0.042, 0.035, 0.38, 12]} />, pos: [-0.1, -0.12, 0] as [number,number,number] },
-    { name: 'Right Lower Leg', geo: <cylinderGeometry args={[0.042, 0.035, 0.38, 12]} />, pos: [0.1, -0.12, 0] as [number,number,number] },
-    { name: 'Left Foot', geo: <boxGeometry args={[0.08, 0.06, 0.18]} />, pos: [-0.1, -0.34, 0.05] as [number,number,number] },
-    { name: 'Right Foot', geo: <boxGeometry args={[0.08, 0.06, 0.18]} />, pos: [0.1, -0.34, 0.05] as [number,number,number] },
-  ];
+      {/* 2. Discrete Anatomical Hitboxes with Independent Hover (Orange) and Click (Red) States */}
+      {ANATOMICAL_ZONES.map((zone) => {
+        const isSelected = selectedZoneId === zone.id || selectedMeshId === zone.id;
+        const isHovered = hoveredZoneId === zone.id;
 
-  const [hovered, setHovered] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+        // Color logic: Selected -> Glowing Crimson Red (#ef4444); Hovered -> Glowing Orange (#ff8c00); Idle -> Transparent Hitbox
+        let color = '#00e5ff';
+        let emissive = '#000000';
+        let emissiveIntensity = 0;
+        let opacity = 0.02; // Very subtle so invisible until hovered/clicked
+        let wireframe = false;
 
-  return (
-    <group>
-      {parts.map((p) => (
-        <mesh
-          key={p.name}
-          position={p.pos}
-          onClick={(e) => { e.stopPropagation(); setSelected(p.name); onPartClick(p.name); }}
-          onPointerOver={(e) => { e.stopPropagation(); setHovered(p.name); document.body.style.cursor = 'pointer'; }}
-          onPointerOut={() => { setHovered(null); document.body.style.cursor = 'default'; }}
-        >
-          {p.geo}
-          <meshStandardMaterial
-            color={selected === p.name ? '#00E5FF' : hovered === p.name ? '#FF8C00' : '#c0392b'}
-            roughness={0.5}
-            metalness={0.1}
-            transparent
-            opacity={0.9}
-          />
-        </mesh>
-      ))}
+        if (isSelected) {
+          color = '#ef4444';
+          emissive = '#dc2626';
+          emissiveIntensity = 1.0;
+          opacity = 0.75;
+        } else if (isHovered) {
+          color = '#ff8c00';
+          emissive = '#ea580c';
+          emissiveIntensity = 0.85;
+          opacity = 0.65;
+        }
+
+        return (
+          <group
+            key={zone.id}
+            position={zone.position}
+            rotation={zone.rotation ? zone.rotation : [0, 0, 0]}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedZoneId(zone.id);
+              onSelectRegion(zone.label, zone.id, new THREE.Vector3(...zone.position));
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              setHoveredZoneId(zone.id);
+              setHoveredPart(zone.label);
+            }}
+            onPointerOut={(e) => {
+              e.stopPropagation();
+              setHoveredZoneId(null);
+              setHoveredPart(null);
+            }}
+          >
+            <mesh>
+              {zone.type === 'sphere' && <sphereGeometry args={zone.args as any} />}
+              {zone.type === 'cylinder' && <cylinderGeometry args={zone.args as any} />}
+              {zone.type === 'box' && <boxGeometry args={zone.args as any} />}
+              <meshStandardMaterial
+                color={color}
+                emissive={emissive}
+                emissiveIntensity={emissiveIntensity}
+                transparent={true}
+                opacity={opacity}
+                roughness={0.2}
+                metalness={0.7}
+                wireframe={wireframe}
+                depthWrite={isSelected || isHovered}
+              />
+            </mesh>
+
+            {/* Glowing Reticle Target Ring on Selected Zone */}
+            {isSelected && (
+              <mesh position={[0, 0, 0]}>
+                <ringGeometry args={[0.26, 0.30, 32]} />
+                <meshBasicMaterial color="#ef4444" transparent opacity={0.9} side={THREE.DoubleSide} />
+              </mesh>
+            )}
+          </group>
+        );
+      })}
     </group>
   );
 }
 
-// ─── Main Page Component ──────────────────────────────────────────────────────
+// Procedural anatomical human fallback
+function ProceduralBodyFallback({
+  onSelectRegion,
+  selectedZoneId,
+  setSelectedZoneId,
+  setHoveredPart,
+}: {
+  onSelectRegion: (p: string, id: string, pt: THREE.Vector3) => void;
+  selectedZoneId: string | null;
+  setSelectedZoneId: (id: string) => void;
+  setHoveredPart: (p: string | null) => void;
+}) {
+  return (
+    <group position={[0, -0.5, 0]}>
+      {ANATOMICAL_ZONES.map((zone) => {
+        const isSelected = selectedZoneId === zone.id;
+        return (
+          <mesh
+            key={zone.id}
+            position={zone.position}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedZoneId(zone.id);
+              onSelectRegion(zone.label, zone.id, new THREE.Vector3(...zone.position));
+            }}
+            onPointerOver={() => setHoveredPart(zone.label)}
+            onPointerOut={() => setHoveredPart(null)}
+          >
+            {zone.type === 'sphere' && <sphereGeometry args={zone.args as any} />}
+            {zone.type === 'cylinder' && <cylinderGeometry args={zone.args as any} />}
+            {zone.type === 'box' && <boxGeometry args={zone.args as any} />}
+            <meshStandardMaterial
+              color={isSelected ? '#ef4444' : '#00e5ff'}
+              emissive={isSelected ? '#dc2626' : '#00364d'}
+              emissiveIntensity={isSelected ? 1.0 : 0.3}
+              wireframe
+            />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
 interface InteractiveBodyPageProps {
   profile: AstronautProfile;
 }
 
 export const InteractiveBodyPage: React.FC<InteractiveBodyPageProps> = ({ profile }) => {
-  const [selectedMesh, setSelectedMesh] = useState<THREE.Mesh | null>(null);
-  const [hoveredMesh, setHoveredMesh] = useState<THREE.Mesh | null>(null);
-  const [layer, setLayer] = useState<'both' | 'muscles' | 'skeleton'>('both');
-  const [xrayOpacity, setXrayOpacity] = useState<number>(1.0);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [searchTarget, setSearchTarget] = useState<THREE.Mesh | null>(null);
-  const [useEcorche, setUseEcorche] = useState<boolean>(true);
+  const [selectedRegion, setSelectedRegion] = useState<string>('Lumbar Spine (L1-L5 Microgravity Delta)');
+  const [selectedMeshId, setSelectedMeshId] = useState<string | null>('spine');
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>('spine');
+  const [hoveredPart, setHoveredPart] = useState<string | null>(null);
+  const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null);
 
-  // Selected part info
-  const [selectedInfo, setSelectedInfo] = useState<{
-    name: string;
-    tissue: string;
-    note: string;
-  } | null>(null);
-
-  // Symptom report form
-  const [symptomText, setSymptomText] = useState<string>('');
-  const [severity, setSeverity] = useState<'Mild' | 'Moderate' | 'Severe'>('Mild');
+  // Form State
+  const [painType, setPainType] = useState<'Sharp' | 'Dull' | 'Burning'>('Dull');
+  const [intensity, setIntensity] = useState<number>(4);
+  const [notes, setNotes] = useState<string>('Microgravity intervertebral disc expansion ache following cycle ergometer exercise.');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [submitToast, setSubmitToast] = useState<string | null>(null);
+  const [showLoggedAlert, setShowLoggedAlert] = useState<boolean>(false);
 
-  // All meshes ref for search
-  const allMeshesRef = useRef<THREE.Mesh[]>([]);
+  // Symptom List
+  const [symptoms, setSymptoms] = useState<SymptomReport[]>([]);
+  const [isLoadingSymptoms, setIsLoadingSymptoms] = useState<boolean>(true);
 
-  const handleMeshClick = (mesh: THREE.Mesh) => {
-    setSelectedMesh(mesh);
-    const ud = mesh.userData as { name?: string; tissue?: string; layer?: string };
-    const name = ud.name || mesh.name || 'Unknown Structure';
-    const tissue = ud.tissue || 'unknown';
-    const note = getAerospaceNote(name, tissue);
-    setSelectedInfo({ name, tissue, note });
-  };
-
-  const handleProceduralClick = (partName: string) => {
-    setSelectedInfo({
-      name: partName,
-      tissue: 'unknown',
-      note: getAerospaceNote(partName, 'muscle'),
-    });
-  };
-
-  const handleSearch = () => {
-    if (!searchQuery.trim() || !allMeshesRef.current.length) return;
-    const q = searchQuery.toLowerCase();
-    const found = allMeshesRef.current.find((m) => {
-      const n = (m.userData?.name || m.name || '').toLowerCase();
-      return n.includes(q);
-    });
-    if (found) {
-      setSearchTarget(found);
-      handleMeshClick(found);
+  const fetchSymptoms = async () => {
+    setIsLoadingSymptoms(true);
+    try {
+      const res = await fetch('/api/symptoms');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setSymptoms(json.data);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load symptoms:', e);
+    } finally {
+      setIsLoadingSymptoms(false);
     }
   };
 
-  const handleSubmitSymptom = async () => {
-    if (!selectedInfo || !symptomText.trim()) return;
+  useEffect(() => {
+    fetchSymptoms();
+  }, []);
+
+  const handleSelectRegion = (part: string, meshId: string, _point: THREE.Vector3) => {
+    setSelectedRegion(part);
+    setSelectedMeshId(meshId);
+    setSelectedZoneId(meshId);
+  };
+
+  const handleQuickSelect = (zoneId: string, part: string, defaultType: 'Sharp' | 'Dull' | 'Burning', defaultIntensity: number, defaultNotes: string) => {
+    setSelectedRegion(part);
+    setSelectedMeshId(zoneId);
+    setSelectedZoneId(zoneId);
+    setPainType(defaultType);
+    setIntensity(defaultIntensity);
+    setNotes(defaultNotes);
+  };
+
+  const handleLogSymptom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRegion) return;
+
     setIsSubmitting(true);
     try {
-      await fetch('/api/symptoms', {
+      const res = await fetch('/api/symptoms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          astronautId: profile.id,
-          astronautName: profile.name,
-          region: selectedInfo.name,
-          description: symptomText.trim(),
-          severity,
-          timestamp: new Date().toISOString(),
+          bodyPart: selectedRegion,
+          meshId: selectedMeshId || 'Manual_Raycast',
+          painType,
+          intensity,
+          notes,
+          status: 'active',
         }),
       });
-      setSubmitToast(`Symptom logged for ${selectedInfo.name} — Flight Surgeon notified.`);
-      setSymptomText('');
-    } catch {
-      setSubmitToast('Symptom saved locally. Will sync when connection restored.');
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setSymptoms((prev) => [json.data, ...prev]);
+          setShowLoggedAlert(true);
+          setTimeout(() => setShowLoggedAlert(false), 4000);
+        }
+      }
+    } catch (err) {
+      console.error('Error logging symptom:', err);
     } finally {
       setIsSubmitting(false);
-      setTimeout(() => setSubmitToast(null), 5000);
+    }
+  };
+
+  const handleDeleteSymptom = async (id: string) => {
+    try {
+      const res = await fetch(`/api/symptoms/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setSymptoms((prev) => prev.filter((s) => s.id !== id));
+      }
+    } catch (err) {
+      console.error('Failed to delete symptom:', err);
     }
   };
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="rounded-2xl border border-[#00E5FF]/20 bg-[#060d1f]/80 backdrop-blur-xl p-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="space-y-7 animate-in fade-in duration-300">
+      {/* Top Banner */}
+      <div className="glass-panel glass-panel-glow-cyan p-6 sm:p-7 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 border border-[#00E5FF]/40 shadow-[0_0_35px_rgba(0,229,255,0.22)]">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-[#00E5FF]/15 border border-[#00E5FF]/50 flex items-center justify-center text-[#00E5FF] shadow-[0_0_20px_rgba(0,229,255,0.35)] shrink-0">
+            <Activity className="w-7 h-7 text-[#00E5FF]" />
+          </div>
           <div>
-            <h2 className="text-lg font-extrabold text-white font-['Chakra_Petch',sans-serif] tracking-wide flex items-center gap-2">
-              <Activity className="w-5 h-5 text-[#00E5FF]" />
-              INTERACTIVE 3D BODY MAP
-            </h2>
-            <p className="text-slate-400 text-xs font-mono mt-0.5">
-              Click any body part to report pain or view aerospace medical info
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white font-['Chakra_Petch',sans-serif] tracking-wide">
+                Interactive 3D Anatomical Body Map
+              </h1>
+              <span className="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-[#00E5FF]/20 border border-[#00E5FF]/50 text-[#00E5FF]">
+                RAYCASTING SENSOR ACTIVE
+              </span>
+            </div>
+            <p className="text-sm font-sans text-slate-300 mt-1">
+              Rotate, zoom, and click any anatomical zone to map physiological symptoms, spinal expansion, or cephalic shifts for <strong className="text-white">{profile.name}</strong>.
             </p>
           </div>
-
-          {/* Model toggle */}
-          <button
-            onClick={() => { setUseEcorche((v) => !v); setSelectedMesh(null); setSelectedInfo(null); }}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-600 text-slate-300 text-xs font-mono hover:border-[#00E5FF]/50 transition-all"
-          >
-            {useEcorche ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            {useEcorche ? 'Simple View' : 'Écorché Model'}
-          </button>
         </div>
 
-        {/* Controls */}
-        <div className="mt-3 flex flex-wrap gap-3 items-center">
-          {/* Layer filter */}
-          <div className="flex items-center gap-1">
-            <Layers className="w-3.5 h-3.5 text-slate-400" />
-            {(['both', 'muscles', 'skeleton'] as const).map((l) => (
-              <button
-                key={l}
-                onClick={() => setLayer(l)}
-                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase transition-all ${
-                  layer === l
-                    ? 'bg-[#00E5FF] text-black'
-                    : 'bg-slate-800 text-slate-400 hover:text-white border border-slate-700'
-                }`}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-
-          {/* X-ray slider */}
-          {useEcorche && (
-            <div className="flex items-center gap-2">
-              <Sliders className="w-3.5 h-3.5 text-slate-400" />
-              <span className="text-[10px] text-slate-400 font-mono">X-RAY</span>
-              <input
-                type="range"
-                min={0.1}
-                max={1}
-                step={0.05}
-                value={xrayOpacity}
-                onChange={(e) => setXrayOpacity(parseFloat(e.target.value))}
-                className="w-24 accent-[#00E5FF]"
-              />
-            </div>
-          )}
-
-          {/* Search */}
-          {useEcorche && (
-            <div className="flex items-center gap-1 ml-auto">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Search muscle / bone…"
-                className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs font-mono focus:border-[#00E5FF] focus:outline-none w-44"
-              />
-              <button
-                onClick={handleSearch}
-                className="px-2.5 py-1 rounded-lg bg-[#00E5FF]/20 border border-[#00E5FF]/30 text-[#00E5FF] hover:bg-[#00E5FF]/30 transition-all"
-              >
-                <Search className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+        {/* Quick Spaceflight Zone Shortcut Buttons */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => handleQuickSelect('spine', 'Lumbar Spine (L1-L5 Microgravity Delta)', 'Dull', 4, 'Microgravity spinal elongation (+4.2cm) intervertebral decompression ache.')}
+            className={`px-3 py-1.5 rounded-lg border font-mono text-xs font-bold transition-all shadow-[0_0_12px_rgba(255,140,0,0.2)] cursor-pointer ${
+              selectedZoneId === 'spine' ? 'bg-[#FF8C00] text-black border-[#FF8C00]' : 'bg-[#FF8C00]/20 hover:bg-[#FF8C00]/30 border-[#FF8C00]/60 text-[#FFB347]'
+            }`}
+          >
+            Spine (+4.2cm)
+          </button>
+          <button
+            onClick={() => handleQuickSelect('cranial', 'Cranial / Sinus (Cephalic Fluid Shift Area)', 'Dull', 3, 'Cephalic fluid shift post-sleep fullness.')}
+            className={`px-3 py-1.5 rounded-lg border font-mono text-xs font-bold transition-all shadow-[0_0_12px_rgba(0,229,255,0.2)] cursor-pointer ${
+              selectedZoneId === 'cranial' ? 'bg-[#00E5FF] text-black border-[#00E5FF]' : 'bg-[#00E5FF]/20 hover:bg-[#00E5FF]/30 border-[#00E5FF]/60 text-[#00E5FF]'
+            }`}
+          >
+            Cephalic Fluid Shift
+          </button>
+          <button
+            onClick={() => handleQuickSelect('right_thigh', 'Right Femoral / Quadriceps', 'Burning', 5, 'Post-ARED squat protocol lactic accumulation.')}
+            className={`px-3 py-1.5 rounded-lg border font-mono text-xs font-bold transition-all shadow-[0_0_12px_rgba(244,63,94,0.2)] cursor-pointer ${
+              selectedZoneId === 'right_thigh' ? 'bg-rose-500 text-white border-rose-500' : 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-500/60 text-rose-300'
+            }`}
+          >
+            Quadriceps Fatigue
+          </button>
         </div>
       </div>
 
-      {/* Main layout: 3D canvas + Info panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Main Content: Left 3D Viewport & Right Symptom Logging Panel */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-7">
+        {/* Left Column (7 cols): 3D Anatomical Body Viewport */}
+        <div className="lg:col-span-7 glass-panel glass-panel-glow-cyan rounded-2xl border border-[#00E5FF]/35 shadow-[0_0_35px_rgba(0,229,255,0.18)] p-4 flex flex-col justify-between h-[640px] relative overflow-hidden bg-[#060b1c]/90">
+          {/* Viewport Top HUD Overlay */}
+          <div className="relative z-10 flex items-center justify-between pointer-events-none">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950/80 border border-[#00E5FF]/40 text-[#00E5FF] font-mono text-xs font-bold pointer-events-auto shadow-[0_0_15px_rgba(0,229,255,0.2)]">
+              <Sparkles className="w-4 h-4 text-[#00E5FF] animate-pulse" />
+              <span>HOLOGRAPHIC ANATOMICAL SCAN</span>
+            </div>
 
-        {/* 3D Canvas */}
-        <div className="lg:col-span-2 rounded-2xl border border-[#00E5FF]/15 bg-[#030810] overflow-hidden" style={{ height: '560px' }}>
-          <Canvas
-            camera={{ position: [1.4, 1.2, 4.1], fov: 30, near: 0.01, far: 100 }}
-            shadows
-            gl={{ antialias: true, alpha: true }}
-            onPointerMissed={() => { setSelectedMesh(null); }}
-          >
-            <ambientLight intensity={0.6} />
-            <directionalLight position={[2, 4, 3]} intensity={1.2} castShadow />
-            <directionalLight position={[-2, 2, -2]} intensity={0.4} color="#00E5FF" />
-            <pointLight position={[0, 2, 1]} intensity={0.5} color="#ffffff" />
+            {hoveredPart && (
+              <div className="px-3.5 py-1.5 rounded-xl bg-[#FF8C00]/25 border border-[#FF8C00]/70 text-white font-mono text-xs font-bold animate-in fade-in shadow-[0_0_18px_rgba(255,140,0,0.35)]">
+                HOVER: <span className="text-[#FFB347]">{hoveredPart}</span>
+              </div>
+            )}
+          </div>
 
-            <OrbitControls
-              enablePan
-              enableZoom
-              enableRotate
-              enableDamping
-              dampingFactor={0.08}
-              minDistance={0.3}
-              maxDistance={20}
-              target={[0, 0.9, 0]}
-            />
+          {/* 3D Canvas Container */}
+          <div className="w-full h-full relative cursor-grab active:cursor-grabbing">
+            <Canvas camera={{ position: [0, 0, 3.6], fov: 42 }}>
+              <ambientLight intensity={1.2} />
+              <directionalLight position={[4, 5, 4]} intensity={2.0} color="#e0f2fe" />
+              <directionalLight position={[-4, 2, -3]} intensity={1.5} color="#00e5ff" />
+              <pointLight position={[0, -2, 2]} intensity={1.2} color="#00e5ff" />
 
-            {useEcorche ? (
-              <Suspense fallback={
-                <mesh position={[0, 0.9, 0]}>
-                  <boxGeometry args={[0.3, 1.6, 0.2]} />
-                  <meshStandardMaterial color="#00E5FF" wireframe opacity={0.4} transparent />
-                </mesh>
-              }>
+              <Suspense
+                fallback={
+                  <ProceduralBodyFallback
+                    onSelectRegion={handleSelectRegion}
+                    selectedZoneId={selectedZoneId}
+                    setSelectedZoneId={setSelectedZoneId}
+                    setHoveredPart={setHoveredPart}
+                  />
+                }
+              >
                 <ModelErrorBoundary
                   fallback={
-                    <ProceduralBody onPartClick={handleProceduralClick} />
+                    <ProceduralBodyFallback
+                      onSelectRegion={handleSelectRegion}
+                      selectedZoneId={selectedZoneId}
+                      setSelectedZoneId={setSelectedZoneId}
+                      setHoveredPart={setHoveredPart}
+                    />
                   }
                 >
-                  <EcorcheModel
-                    layer={layer}
-                    xrayOpacity={xrayOpacity}
-                    selectedMesh={selectedMesh}
-                    hoveredMesh={hoveredMesh}
-                    onMeshClick={handleMeshClick}
-                    onMeshHover={setHoveredMesh}
-                    searchTarget={searchTarget}
+                  <BodyModel
+                    selectedMeshId={selectedMeshId}
+                    onSelectRegion={handleSelectRegion}
+                    hoveredPart={hoveredPart}
+                    setHoveredPart={setHoveredPart}
+                    hoveredZoneId={hoveredZoneId}
+                    setHoveredZoneId={setHoveredZoneId}
+                    selectedZoneId={selectedZoneId}
+                    setSelectedZoneId={setSelectedZoneId}
                   />
                 </ModelErrorBoundary>
               </Suspense>
-            ) : (
-              <ProceduralBody onPartClick={handleProceduralClick} />
-            )}
-          </Canvas>
 
-          {/* Canvas overlay legend */}
-          <div className="absolute bottom-4 left-4 flex items-center gap-3 text-[10px] font-mono text-slate-400 pointer-events-none">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#c0392b] inline-block" /> Muscle</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#e8d5b0] inline-block" /> Bone</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#FF8C00] inline-block" /> Hover</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#00E5FF] inline-block" /> Selected</span>
+              <OrbitControls
+                enableZoom={true}
+                enablePan={true}
+                minDistance={1.8}
+                maxDistance={5.5}
+                maxPolarAngle={Math.PI / 1.6}
+                minPolarAngle={Math.PI / 4}
+              />
+            </Canvas>
+          </div>
+
+          {/* Bottom Viewport Instructions */}
+          <div className="relative z-10 flex flex-wrap items-center justify-between text-xs font-mono text-slate-300 pt-2 border-t border-slate-800">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_#f43f5e]" />
+              <span>CLICK TO HIGHLIGHT ANATOMICAL REGION (RED)</span>
+            </div>
+            <span className="text-slate-400">
+              ORBIT: Left-Click · PAN: Right-Click · ZOOM: Scroll
+            </span>
           </div>
         </div>
 
-        {/* Info + Symptom Panel */}
-        <div className="space-y-4">
-          {/* Selected part info */}
-          {selectedInfo ? (
-            <div className="rounded-2xl border border-[#00E5FF]/30 bg-[#060d1f]/90 backdrop-blur-xl p-4 space-y-3">
-              <div className="flex items-start justify-between gap-2">
+        {/* Right Column (5 cols): Selected Region & Symptom Logging Form */}
+        <div className="lg:col-span-5 space-y-6">
+          {/* Panel 1: Symptom Form */}
+          <div className="glass-panel glass-panel-glow-orange p-6 sm:p-7 rounded-2xl border border-[#FF8C00]/40 shadow-[0_0_35px_rgba(255,140,0,0.2)] space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-[#FF8C00]/20 text-[#FF8C00] border border-[#FF8C00]/40">
+                  <Flame className="w-5 h-5 text-[#FF8C00]" />
+                </div>
                 <div>
-                  <p className="text-[9px] font-mono text-[#00E5FF] tracking-widest mb-1">SELECTED STRUCTURE</p>
-                  <h3 className="text-white font-bold text-sm font-['Chakra_Petch',sans-serif] leading-tight">
-                    {selectedInfo.name}
+                  <div className="text-xs font-mono uppercase tracking-wider text-slate-300 font-bold">
+                    SELECTED REGION
+                  </div>
+                  <h3 className="text-xl font-black text-white font-['Chakra_Petch',sans-serif] glow-text-orange tracking-wide">
+                    {selectedRegion}
                   </h3>
-                  <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[10px] font-mono capitalize">
-                    {selectedInfo.tissue}
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleLogSymptom} className="space-y-4">
+              {/* 1. Pain Type Selection (Sharp, Dull, Burning) */}
+              <div>
+                <label className="block text-xs font-mono font-bold uppercase tracking-wider text-slate-200 mb-2">
+                  1. What is the pain type?
+                </label>
+                <div className="grid grid-cols-3 gap-2.5">
+                  {(['Sharp', 'Dull', 'Burning'] as const).map((type) => {
+                    const isSelected = painType === type;
+                    return (
+                      <button
+                        type="button"
+                        key={type}
+                        onClick={() => setPainType(type)}
+                        className={`py-2.5 px-3 rounded-xl font-mono text-xs sm:text-sm font-bold border transition-all ${
+                          isSelected
+                            ? 'bg-[#FF8C00] text-black border-[#FF8C00] shadow-[0_0_18px_rgba(255,140,0,0.5)]'
+                            : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-500'
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 2. Pain Intensity Slider (0-10) */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-mono font-bold uppercase tracking-wider text-slate-200">
+                    2. Pain Intensity (0 - 10)
+                  </label>
+                  <span className={`text-base font-black font-mono px-2.5 py-0.5 rounded ${
+                    intensity > 6 ? 'bg-rose-500/20 text-rose-400 border border-rose-500/50' : 'bg-[#FF8C00]/20 text-[#FF8C00] border border-[#FF8C00]/50'
+                  }`}>
+                    {intensity} / 10
                   </span>
                 </div>
-                <button
-                  onClick={() => { setSelectedMesh(null); setSelectedInfo(null); }}
-                  className="p-1 text-slate-500 hover:text-white"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Aerospace note */}
-              <div className="rounded-xl bg-[#00E5FF]/5 border border-[#00E5FF]/15 p-3">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Info className="w-3.5 h-3.5 text-[#00E5FF]" />
-                  <span className="text-[9px] text-[#00E5FF] font-mono tracking-widest">AEROSPACE MEDICAL NOTE</span>
-                </div>
-                <p className="text-slate-300 text-[11px] leading-relaxed">{selectedInfo.note}</p>
-              </div>
-
-              {/* Symptom report form */}
-              <div className="rounded-xl bg-rose-500/5 border border-rose-500/20 p-3 space-y-2.5">
-                <div className="flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
-                  <span className="text-[9px] text-rose-400 font-mono tracking-widest">REPORT DISCOMFORT</span>
-                </div>
-
-                <textarea
-                  value={symptomText}
-                  onChange={(e) => setSymptomText(e.target.value)}
-                  placeholder={`Describe pain or discomfort in ${selectedInfo.name}…`}
-                  rows={3}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700 text-white text-xs font-sans focus:border-rose-400 focus:outline-none resize-none"
+                <input
+                  type="range"
+                  min="0"
+                  max="10"
+                  value={intensity}
+                  onChange={(e) => setIntensity(parseInt(e.target.value, 10))}
+                  className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-[#FF8C00]"
                 />
-
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-400 font-mono">SEVERITY:</span>
-                  {(['Mild', 'Moderate', 'Severe'] as const).map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => setSeverity(s)}
-                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all ${
-                        severity === s
-                          ? s === 'Severe' ? 'bg-rose-500 text-white' : s === 'Moderate' ? 'bg-amber-500 text-black' : 'bg-emerald-500 text-black'
-                          : 'bg-slate-800 text-slate-400 border border-slate-700'
-                      }`}
-                    >
-                      {s}
-                    </button>
-                  ))}
+                <div className="flex justify-between text-[10px] font-mono text-slate-400 mt-1">
+                  <span>0 (No Pain)</span>
+                  <span>5 (Moderate)</span>
+                  <span>10 (Severe / Incapacitating)</span>
                 </div>
-
-                <button
-                  onClick={handleSubmitSymptom}
-                  disabled={isSubmitting || !symptomText.trim()}
-                  className="w-full py-2 rounded-xl bg-rose-500 hover:bg-rose-400 disabled:bg-slate-700 disabled:text-slate-500 text-white font-bold text-xs font-mono flex items-center justify-center gap-2 transition-all"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  {isSubmitting ? 'TRANSMITTING…' : 'LOG SYMPTOM TO FLIGHT SURGEON'}
-                </button>
               </div>
-            </div>
-          ) : (
-            /* Placeholder when nothing is selected */
-            <div className="rounded-2xl border border-slate-700/40 bg-[#060d1f]/60 backdrop-blur-xl p-6 text-center">
-              <Sparkles className="w-10 h-10 text-[#00E5FF]/30 mx-auto mb-3" />
-              <p className="text-slate-500 text-xs font-mono">
-                Click any body part on the 3D model to view aerospace medical information and report symptoms.
-              </p>
-            </div>
-          )}
 
-          {/* Quick-pain body map (2D fallback reference) */}
-          <div className="rounded-2xl border border-slate-700/40 bg-[#060d1f]/60 backdrop-blur-xl p-4">
-            <p className="text-[9px] font-mono text-slate-500 tracking-widest mb-3">QUICK PAIN LOCATOR</p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {[
-                'Head / Skull', 'Neck / Cervical', 'Left Shoulder', 'Right Shoulder',
-                'Chest / Sternum', 'Thoracic Spine', 'Lumbar Spine', 'Abdomen',
-                'Left Hip', 'Right Hip', 'Left Knee', 'Right Knee',
-                'Left Lower Leg', 'Right Lower Leg', 'Left Foot', 'Right Foot',
-              ].map((part) => (
-                <button
-                  key={part}
-                  onClick={() => handleProceduralClick(part)}
-                  className={`px-2 py-1.5 rounded-lg text-[10px] font-mono text-left transition-all border ${
-                    selectedInfo?.name === part
-                      ? 'bg-[#00E5FF]/15 border-[#00E5FF]/40 text-[#00E5FF]'
-                      : 'bg-slate-900/60 border-slate-700/40 text-slate-400 hover:border-[#00E5FF]/30 hover:text-white'
-                  }`}
-                >
-                  {part}
-                </button>
-              ))}
+              {/* 3. Notes Text Area */}
+              <div>
+                <label className="block text-xs font-mono font-bold uppercase tracking-wider text-slate-200 mb-2">
+                  3. Notes & Context
+                </label>
+                <textarea
+                  rows={3}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Describe sensation, relation to EVA/ARED exercise, or cephalic shift..."
+                  className="w-full bg-slate-900/90 text-white placeholder-slate-500 border border-slate-700 focus:border-[#FF8C00] rounded-xl p-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#FF8C00] font-sans"
+                />
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-3.5 rounded-xl bg-[#FF8C00] hover:bg-[#FF8C00]/90 text-black font-mono font-extrabold text-sm tracking-wider flex items-center justify-center gap-2 transition-all shadow-[0_0_25px_rgba(255,140,0,0.4)] disabled:opacity-50"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{isSubmitting ? 'LOGGING SYMPTOM...' : 'LOG SYMPTOM TO TELEMETRY'}</span>
+              </button>
+            </form>
+
+            {/* Confirmation Banner */}
+            {showLoggedAlert && (
+              <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 font-mono text-xs flex items-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.3)] animate-in fade-in">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Symptom report successfully logged to Flight Telemetry Registry!</span>
+              </div>
+            )}
+          </div>
+
+          {/* Panel 2: Logged Symptoms List */}
+          <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="text-xs font-mono uppercase tracking-wider text-slate-200 font-bold flex items-center gap-2">
+                <Layers className="w-4 h-4 text-[#00E5FF]" />
+                <span>ACTIVE CLINICAL REPORTS ({symptoms.length})</span>
+              </div>
+              <span className="text-[11px] font-mono text-[#00E5FF]">JSC TELEMEDICINE SYNCED</span>
             </div>
+
+            {isLoadingSymptoms ? (
+              <div className="py-6 text-center text-xs font-mono text-slate-400">Loading symptoms...</div>
+            ) : symptoms.length === 0 ? (
+              <div className="py-6 text-center text-xs font-mono text-slate-400">
+                No active symptoms logged. Click on the 3D body to add one.
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                {symptoms.map((sym) => (
+                  <div
+                    key={sym.id}
+                    className="p-3.5 rounded-xl bg-[#091128] border border-slate-700/80 flex items-start justify-between gap-3 text-xs"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white font-['Chakra_Petch',sans-serif] text-sm">
+                          {sym.bodyPart}
+                        </span>
+                        <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-[#FF8C00]/20 text-[#FF8C00] border border-[#FF8C00]/40">
+                          {sym.painType} ({sym.intensity}/10)
+                        </span>
+                      </div>
+                      <p className="text-slate-300 font-sans line-clamp-2">{sym.notes}</p>
+                      <div className="text-[10px] font-mono text-slate-400">
+                        {new Date(sym.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {sym.id}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleDeleteSymptom(sym.id)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 transition-colors"
+                      title="Resolve or remove symptom report"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
-
-      {/* Toast */}
-      {submitToast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-xl bg-[#080e22]/95 border-2 border-[#00E5FF]/60 text-white shadow-[0_0_35px_rgba(0,229,255,0.45)] backdrop-blur-xl font-mono text-xs font-semibold animate-in fade-in slide-in-from-bottom-3 duration-200">
-          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{submitToast}</span>
-        </div>
-      )}
     </div>
   );
 };
-
-export default InteractiveBodyPage;

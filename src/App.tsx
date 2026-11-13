@@ -1,45 +1,38 @@
 import React, { useState, useEffect } from 'react';
-import { SpaceBackground } from './components/SpaceBackground.tsx';
-import { FlightSurgeonHeader } from './components/FlightSurgeonHeader.tsx';
-import { FlightSurgeonSidebar } from './components/FlightSurgeonSidebar.tsx';
-import { DashboardOverviewPage } from './components/DashboardOverviewPage.tsx';
-import { AstronautMonitoringPage } from './components/AstronautMonitoringPage.tsx';
-import { IndividualAstronautProfile } from './components/IndividualAstronautProfile.tsx';
-import { HealthAnalyticsPage } from './components/HealthAnalyticsPage.tsx';
-import { MedicalRecordsPage } from './components/MedicalRecordsPage.tsx';
-import { ExerciseMonitoringPage } from './components/ExerciseMonitoringPage.tsx';
-import { NutriLogPage } from './components/NutriLogPage.tsx';
-import { MedicalRestrictionsPage } from './components/MedicalRestrictionsPage.tsx';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Layout } from './components/Layout.tsx';
+import { LoginScreen } from './components/LoginScreen.tsx';
+import { AstronautHeader } from './components/AstronautHeader.js';
+import { CrewDossierCard } from './components/CrewDossierCard.js';
+import { ClinicalAdaptationsCard } from './components/ClinicalAdaptationsCard.js';
+import { SurgeonLinkCard } from './components/SurgeonLinkCard.js';
+import { VitalSignsPage } from './components/VitalSignsPage.tsx';
+import { MentalWellnessPage } from './components/MentalWellnessPage.tsx';
+import { InteractiveBodyPage } from './components/InteractiveBodyPage.tsx';
+import { DailyCheckinPage } from './components/DailyCheckinPage.tsx';
+import { FitnessPage } from './components/FitnessPage.tsx';
+import { UnifiedTimelinePage } from './components/UnifiedTimelinePage.tsx';
+import { CommsHubPage } from './components/CommsHubPage.tsx';
 import { MedicalReportsPage } from './components/MedicalReportsPage.tsx';
-import { MedicalCommunicationsPage } from './components/MedicalCommunicationsPage.tsx';
-import { MedicalAlertsPage } from './components/MedicalAlertsPage.tsx';
-import { EditProfileModal } from './components/EditProfileModal.tsx';
-import { ClinicalContextModal } from './components/ClinicalContextModal.tsx';
-import { 
-  AstronautProfile, 
-  FlightSurgeon, 
-  VitalsData, 
-  SymptomReport, 
-  MedicalRestriction, 
-  DoctorNote, 
-  MedicalConversation, 
-  MedicalMessage, 
-  CrewMemberSummary, 
-  SpaceExercise, 
+import { MissionEnvironmentPage } from './components/MissionEnvironmentPage.tsx';
+import { DigitalTwinPage } from './components/DigitalTwinPage.tsx';
+import { DashboardOverviewPage } from './components/DashboardOverviewPage.tsx';
+import { IndividualAstronautProfile } from './components/IndividualAstronautProfile.tsx';
+import { MedicalAssistantPage } from './components/MedicalAssistantPage.tsx';
+import { AuthProvider, useAuth } from './contexts/AuthContext.tsx';
+import {
+  AstronautProfile,
+  FlightSurgeon,
+  CrewMemberSummary,
+  VitalsData,
+  SymptomReport,
+  MedicalRestriction,
+  DoctorNote,
+  SpaceExercise,
   TimelineEvent,
   MedicalAlert,
-} from './types/astronaut.ts';
-import { 
-  CheckCircle, 
-  AlertCircle, 
-  Sparkles, 
-  ShieldAlert, 
-  Plus, 
-  X, 
-  Save 
-} from 'lucide-react';
-import { AuthPage, AuthUser } from './components/AuthPage.tsx';
-import { AstronautApp } from './components/AstronautApp.tsx';
+} from './types/astronaut.js';
+import { Sliders, Edit3, BookOpen } from 'lucide-react';
 
 const DEFAULT_INITIAL_PROFILE: AstronautProfile = {
   id: 'ASTRO-74-SJ',
@@ -49,7 +42,7 @@ const DEFAULT_INITIAL_PROFILE: AstronautProfile = {
   role: 'Mission Specialist / Payload Bio-Engineer',
   missionId: 'EXP-74 / ARTEMIS BIO-LAB',
   healthStatus: 'nominal',
-  photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+  photoUrl: '/images/astronaut_salma_portrait.jpg',
   totalEvaHours: 28.5,
   bloodType: 'O-Positive (O+)',
   spineElongation: 4.2,
@@ -75,814 +68,498 @@ const DEFAULT_INITIAL_PROFILE: AstronautProfile = {
   updatedAt: new Date().toISOString(),
 };
 
-export default function App() {
-  // ── Auth Gate ────────────────────────────────────────────
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const handleLogout = () => setAuthUser(null);
+const TAB_TO_ROUTE: Record<string, string> = {
+  profile: '/profile',
+  vitals: '/vitals',
+  checkin: '/checkin',
+  fitness: '/fitness',
+  mental: '/mental-wellness',
+  'mental-wellness': '/mental-wellness',
+  body3d: '/3d-body',
+  symptoms: '/3d-body',
+  '3d-body': '/3d-body',
+  twin: '/digital-twin',
+  'digital-twin': '/digital-twin',
+  timeline: '/timeline',
+  comms: '/comms',
+  reports: '/reports',
+  environment: '/environment',
+  overview: '/surgeon-overview',
+  monitoring: '/surgeon-overview',
+  individual: '/surgeon-profile',
+  assistant: '/medical-assistant',
+};
 
+function RequireAuth({ children }: { children: React.ReactElement }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) {
+    return null;
+  }
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+}
+
+function LoginRoute() {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) {
+    return null;
+  }
+  if (isAuthenticated) {
+    return <Navigate to="/profile" replace />;
+  }
+  return <LoginScreen />;
+}
+
+function AppRoutes() {
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<AstronautProfile>(DEFAULT_INITIAL_PROFILE);
-  const [currentTab, setCurrentTab] = useState<string>('overview');
-  const [selectedAstronautId, setSelectedAstronautId] = useState<string>('ASTRO-74-SJ');
+  const [isEditingInline, setIsEditingInline] = useState<boolean>(false);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [isContextModalOpen, setIsContextModalOpen] = useState<boolean>(false);
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  // Application Data Stores
+  // Flight Surgeon / Crew Oversight stores (pulled from CODE-REABER)
   const [crew, setCrew] = useState<CrewMemberSummary[]>([]);
   const [vitals, setVitals] = useState<VitalsData | null>(null);
   const [symptoms, setSymptoms] = useState<SymptomReport[]>([]);
   const [restrictions, setRestrictions] = useState<MedicalRestriction[]>([]);
   const [notes, setNotes] = useState<DoctorNote[]>([]);
-  const [conversations, setConversations] = useState<MedicalConversation[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<string>('conv-med-team');
-  const [messages, setMessages] = useState<MedicalMessage[]>([]);
   const [exercises, setExercises] = useState<SpaceExercise[]>([]);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [alerts, setAlerts] = useState<MedicalAlert[]>([]);
-
-  // Modals & UI Controls
-  const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState<boolean>(false);
-  const [isClinicalContextOpen, setIsClinicalContextOpen] = useState<boolean>(false);
-  const [isQuickRestrictionOpen, setIsQuickRestrictionOpen] = useState<boolean>(false);
-  const [isQuickNoteOpen, setIsQuickNoteOpen] = useState<boolean>(false);
-  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
-
-  // Quick Restriction Form State
-  const [quickResName, setQuickResName] = useState<string>('');
-  const [quickResDesc, setQuickResDesc] = useState<string>('');
-  const [quickResRegion, setQuickResRegion] = useState<string>('Lumbar Spine (L3-L5)');
-  const [quickResSeverity, setQuickResSeverity] = useState<'High' | 'Moderate' | 'Low'>('High');
-  const [quickResExercises, setQuickResExercises] = useState<string>('ARED Deadlift, ARED Squat');
-
-  // Quick Note Form State
-  const [quickNoteTitle, setQuickNoteTitle] = useState<string>('');
-  const [quickNoteContent, setQuickNoteContent] = useState<string>('');
-  const [quickNoteCategory, setQuickNoteCategory] = useState<DoctorNote['category']>('Routine Assessment');
+  const [selectedAstronautId, setSelectedAstronautId] = useState<string>('ASTRO-74-SJ');
 
   const triggerToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => {
       setToastMessage(null);
-    }, 4500);
+    }, 5000);
   };
 
-  // 1. Initial Data Fetching from Backend REST APIs
-  const fetchAllInitialData = async () => {
+  const navigateByTab = (tab: string) => {
+    const target = TAB_TO_ROUTE[tab] || (tab.startsWith('/') ? tab : `/${tab}`);
+    navigate(target);
+  };
+
+  const loadProfile = async () => {
     try {
-      // Profile
-      const pRes = await fetch('/api/profile');
-      if (pRes.ok) {
-        const json = await pRes.json();
-        if (json.success && json.data) setProfile(json.data);
-      }
-
-      // Crew
-      const cRes = await fetch('/api/crew');
-      if (cRes.ok) {
-        const json = await cRes.json();
-        if (json.success && json.data) setCrew(json.data);
-      }
-
-      // Vitals
-      const vRes = await fetch('/api/vitals');
-      if (vRes.ok) {
-        const json = await vRes.json();
-        if (json.success && json.data) setVitals(json.data);
-      }
-
-      // Symptoms
-      const sRes = await fetch('/api/symptoms');
-      if (sRes.ok) {
-        const json = await sRes.json();
-        if (json.success && json.data) setSymptoms(json.data);
-      }
-
-      // Restrictions
-      const rRes = await fetch('/api/restrictions');
-      if (rRes.ok) {
-        const json = await rRes.json();
-        if (json.success && json.data) setRestrictions(json.data);
-      }
-
-      // Doctor Notes
-      const nRes = await fetch('/api/doctor-notes');
-      if (nRes.ok) {
-        const json = await nRes.json();
-        if (json.success && json.data) setNotes(json.data);
-      }
-
-      // Conversations
-      const convRes = await fetch('/api/communications/conversations');
-      if (convRes.ok) {
-        const json = await convRes.json();
+      const response = await fetch('/api/profile');
+      if (response.ok) {
+        const json = await response.json();
         if (json.success && json.data) {
-          setConversations(json.data);
-          if (json.data.length > 0 && !activeConversationId) {
-            setActiveConversationId(json.data[0].id);
-          }
+          setProfile(json.data);
         }
       }
+    } catch {
+      // Fallback to baseline
+    }
+  };
 
-      // Timeline
-      const tRes = await fetch('/api/timeline');
-      if (tRes.ok) {
-        const json = await tRes.json();
-        if (json.success && json.data) setTimeline(json.data);
-      }
-
-      // Exercises
-      const eRes = await fetch('/api/fitness/exercises');
-      if (eRes.ok) {
-        const json = await eRes.json();
-        if (json.success && json.data) setExercises(json.data);
-      }
-
-      // Medical Alerts
-      const aRes = await fetch('/api/alerts');
-      if (aRes.ok) {
-        const json = await aRes.json();
-        if (json.success && json.data) setAlerts(json.data);
-      }
-    } catch (err) {
-      console.warn('[ASTRA Telemetry Init Error]:', err);
+  const fetchSurgeonData = async () => {
+    try {
+      const [cRes, vRes, sRes, rRes, nRes, eRes, tRes, aRes] = await Promise.all([
+        fetch('/api/crew'),
+        fetch('/api/vitals'),
+        fetch('/api/symptoms'),
+        fetch('/api/restrictions'),
+        fetch('/api/doctor-notes'),
+        fetch('/api/fitness/exercises'),
+        fetch('/api/timeline'),
+        fetch('/api/alerts'),
+      ]);
+      const [cJ, vJ, sJ, rJ, nJ, eJ, tJ, aJ] = await Promise.all([
+        cRes.json(),
+        vRes.json(),
+        sRes.json(),
+        rRes.json(),
+        nRes.json(),
+        eRes.json(),
+        tRes.json(),
+        aRes.json(),
+      ]);
+      if (cJ.success) setCrew(cJ.data);
+      if (vJ.success) setVitals(vJ.data);
+      if (sJ.success) setSymptoms(sJ.data);
+      if (rJ.success) setRestrictions(rJ.data);
+      if (nJ.success) setNotes(nJ.data);
+      if (eJ.success) setExercises(eJ.data);
+      if (tJ.success) setTimeline(tJ.data);
+      if (aJ.success) setAlerts(aJ.data);
+    } catch {
+      // Silent fallback
     }
   };
 
   useEffect(() => {
-    fetchAllInitialData();
+    loadProfile();
+    fetchSurgeonData();
   }, []);
 
-  // Fetch messages when active conversation changes
-  useEffect(() => {
-    if (!activeConversationId) return;
-    const fetchActiveMessages = async () => {
-      try {
-        const res = await fetch(`/api/communications/messages/${activeConversationId}`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && json.data) {
-            setMessages(json.data);
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to fetch messages for', activeConversationId, err);
-      }
-    };
-    fetchActiveMessages();
-  }, [activeConversationId]);
+  const handleSaveProfile = async (updatesToSave?: Partial<AstronautProfile>) => {
+    setIsSaving(true);
+    const dataToSend = updatesToSave || profile;
 
-  // Handler: Select an astronaut and navigate to detailed individual profile
-  const handleSelectAstronaut = (astroId: string) => {
-    setSelectedAstronautId(astroId);
-    setCurrentTab('individual');
-    triggerToast(`Loaded clinical dossier for astronaut ${astroId}`, 'info');
-  };
-
-  // Handler: Add Medical Restriction
-  const handleAddRestriction = async (newRes: Omit<MedicalRestriction, 'id'>) => {
     try {
-      const res = await fetch('/api/restrictions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newRes),
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setRestrictions((prev) => [json.data, ...prev]);
-        triggerToast(`Medical restriction registered: ${newRes.name}`, 'success');
-        // Refresh crew and timeline
-        const cRes = await fetch('/api/crew');
-        if (cRes.ok) {
-          const cJson = await cRes.json();
-          if (cJson.success) setCrew(cJson.data);
-        }
-        const tRes = await fetch('/api/timeline');
-        if (tRes.ok) {
-          const tJson = await tRes.json();
-          if (tJson.success) setTimeline(tJson.data);
-        }
-      }
-    } catch (e) {
-      // Local fallback
-      const localRes: MedicalRestriction = {
-        ...newRes,
-        id: `RES-${Date.now()}`,
-      };
-      setRestrictions((prev) => [localRes, ...prev]);
-      triggerToast(`Restriction saved locally: ${newRes.name}`, 'info');
-    }
-  };
-
-  // Handler: Update / Lift Medical Restriction
-  const handleUpdateRestriction = async (id: string, updates: Partial<MedicalRestriction>) => {
-    try {
-      const res = await fetch(`/api/restrictions/${id}`, {
+      const response = await fetch('/api/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
+        body: JSON.stringify(dataToSend),
       });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setRestrictions((prev) => prev.map((r) => (r.id === id ? json.data : r)));
-        triggerToast(
-          updates.status === 'Lifted'
-            ? 'Medical restriction cleared and signed off by Flight Surgeon'
-            : 'Medical restriction updated',
-          'success'
-        );
+
+      const result = await response.json();
+      if (response.ok && result.success) {
+        setProfile(result.data);
+        setIsEditingInline(false);
+        triggerToast('Astronaut dossier synchronized to Ground Telemetry DB', 'success');
+      } else {
+        throw new Error(result.error || 'Server validation rejected updates');
       }
-    } catch (e) {
-      setRestrictions((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
-      );
-      triggerToast('Restriction status updated locally', 'info');
+    } catch (_error: any) {
+      setProfile((prev) => ({ ...prev, ...(updatesToSave || {}) }));
+      setIsEditingInline(false);
+      triggerToast('Local changes updated (Offline fallback active)', 'info');
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  // Handler: Delete Medical Restriction
-  const handleDeleteRestriction = async (id: string) => {
-    try {
-      await fetch(`/api/restrictions/${id}`, { method: 'DELETE' });
-      setRestrictions((prev) => prev.filter((r) => r.id !== id));
-      triggerToast('Restriction removed from active database', 'info');
-    } catch (e) {
-      setRestrictions((prev) => prev.filter((r) => r.id !== id));
+  const handleResetProfile = async () => {
+    if (!window.confirm('Reset astronaut dossier back to Dr. Salma Johnson NASA baseline?')) {
+      return;
     }
-  };
 
-  // Handler: Add Doctor Note
-  const handleAddDoctorNote = async (newNote: Omit<DoctorNote, 'id' | 'timestamp'>) => {
     try {
-      const res = await fetch('/api/doctor-notes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newNote),
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setNotes((prev) => [json.data, ...prev]);
-        triggerToast(`Clinical note recorded: "${newNote.title}"`, 'success');
-        const tRes = await fetch('/api/timeline');
-        if (tRes.ok) {
-          const tJson = await tRes.json();
-          if (tJson.success) setTimeline(tJson.data);
+      const response = await fetch('/api/profile/reset', { method: 'POST' });
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data) {
+          setProfile(result.data);
         }
+      } else {
+        setProfile(DEFAULT_INITIAL_PROFILE);
       }
-    } catch (e) {
-      const localNote: DoctorNote = {
-        ...newNote,
-        id: `NOTE-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-      };
-      setNotes((prev) => [localNote, ...prev]);
-      triggerToast('Clinical note recorded locally', 'info');
+      setIsEditingInline(false);
+      triggerToast('Profile successfully reset to Expedition-74 baseline', 'info');
+    } catch (_e) {
+      setProfile(DEFAULT_INITIAL_PROFILE);
+      setIsEditingInline(false);
+      triggerToast('Profile baseline reset locally', 'info');
     }
   };
 
-  // Handler: Update Doctor Note
-  const handleUpdateDoctorNote = async (id: string, updates: Partial<DoctorNote>) => {
-    try {
-      const res = await fetch(`/api/doctor-notes/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setNotes((prev) => prev.map((n) => (n.id === id ? json.data : n)));
-        triggerToast('Doctor note updated', 'success');
-      }
-    } catch (e) {
-      setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, ...updates } : n)));
+  const handleFieldChange = (field: keyof AstronautProfile, value: any) => {
+    setProfile((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSurgeonChange = (field: keyof FlightSurgeon, value: string) => {
+    setProfile((prev) => ({
+      ...prev,
+      assignedSurgeon: {
+        ...prev.assignedSurgeon,
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleAddAllergy = (allergy: string) => {
+    if (!profile.allergies.includes(allergy)) {
+      setProfile((prev) => ({
+        ...prev,
+        allergies: [...prev.allergies, allergy],
+      }));
+      triggerToast(`Registered allergy: ${allergy}`, 'info');
     }
   };
 
-  // Handler: Update Symptom Review Status
-  const handleUpdateSymptomStatus = async (symptomId: string, status: 'active' | 'monitoring' | 'resolved') => {
-    setSymptoms((prev) =>
-      prev.map((s) => (s.id === symptomId ? { ...s, status } : s))
-    );
-    triggerToast(`Symptom ${symptomId} review status set to ${status.toUpperCase()}`, 'info');
+  const handleRemoveAllergy = (index: number) => {
+    setProfile((prev) => ({
+      ...prev,
+      allergies: prev.allergies.filter((_, i) => i !== index),
+    }));
   };
 
-  // Handler: Send Message in Medical Communications
-  const handleSendMessage = async (
-    conversationId: string,
-    content: string,
-    messageType: 'clinical_directive' | 'telemetry_alert' | 'routine' | 'clearance' = 'routine',
-    priority: 'normal' | 'urgent' | 'priority' = 'normal'
-  ) => {
-    try {
-      const res = await fetch('/api/communications/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversationId, content, messageType, priority }),
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setMessages((prev) => [...prev, json.data]);
-        // Update conversation last message preview
-        setConversations((prev) =>
-          prev.map((c) =>
-            c.id === conversationId
-              ? { ...c, lastMessage: content, lastTimestamp: json.data.timestamp }
-              : c
-          )
-        );
-        triggerToast('Message transmitted via Ground Control Relay', 'success');
-      }
-    } catch (e) {
-      // Local fallback
-      const localMsg: MedicalMessage = {
-        id: `msg-${Date.now()}`,
-        conversationId,
-        senderId: 'user-fs-vance',
-        senderName: 'Dr. Marcus Vance, M.D. (You)',
-        senderRole: 'Lead Flight Surgeon',
-        content,
-        timestamp: new Date().toISOString(),
-        isSurgeon: true,
-        messageType,
-        priority,
-      };
-      setMessages((prev) => [...prev, localMsg]);
-      triggerToast('Message sent (Local telemetry cache)', 'info');
+  const handleAddCondition = (condition: string) => {
+    if (!profile.conditions.includes(condition)) {
+      setProfile((prev) => ({
+        ...prev,
+        conditions: [...prev.conditions, condition],
+      }));
+      triggerToast(`Added adaptation tracking: ${condition}`, 'info');
     }
   };
 
-  // Handler: Acknowledge Medical Alert
-  const handleAcknowledgeAlert = async (alertId: string) => {
-    try {
-      const res = await fetch(`/api/alerts/${alertId}/acknowledge`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ surgeonName: 'Dr. Marcus Vance, M.D.' }),
-      });
-      if (res.ok) {
-        setAlerts((prev) =>
-          prev.map((a) =>
-            a.id === alertId
-              ? { ...a, isAcknowledged: true, reviewedBy: 'Dr. Marcus Vance, M.D.' }
-              : a
-          )
-        );
-        triggerToast('Medical alert acknowledged and recorded in flight log', 'success');
-      }
-    } catch (e) {
-      setAlerts((prev) =>
-        prev.map((a) =>
-          a.id === alertId
-            ? { ...a, isAcknowledged: true, reviewedBy: 'Dr. Marcus Vance, M.D.' }
-            : a
-        )
-      );
-      triggerToast('Alert marked reviewed locally', 'info');
-    }
+  const handleRemoveCondition = (index: number) => {
+    setProfile((prev) => ({
+      ...prev,
+      conditions: prev.conditions.filter((_, i) => i !== index),
+    }));
   };
 
-  // Handler: Dismiss / Resolve Alert
-  const handleDismissAlert = async (alertId: string) => {
-    try {
-      await fetch(`/api/alerts/${alertId}`, { method: 'DELETE' });
-      setAlerts((prev) => prev.filter((a) => a.id !== alertId));
-      triggerToast('Medical alert cleared from active monitoring queue', 'info');
-    } catch (e) {
-      setAlerts((prev) => prev.filter((a) => a.id !== alertId));
-    }
+  const handlePhotoUpload = (photoDataUrl: string) => {
+    setProfile((prev) => ({ ...prev, photoUrl: photoDataUrl }));
+    triggerToast('New astronaut photo preview loaded', 'success');
   };
 
-  // Quick Restriction Submit
-  const handleQuickRestrictionSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!quickResName.trim()) return;
-    handleAddRestriction({
-      astronautId: profile.id,
-      astronautName: profile.name,
-      name: quickResName.trim(),
-      description: quickResDesc.trim() || 'Flight Surgeon safety limitation.',
-      affectedRegion: quickResRegion,
-      restrictedExercises: quickResExercises.split(',').map((s) => s.trim()),
-      severity: quickResSeverity,
-      effectiveDate: `MET D+84 (${new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit' })})`,
-      status: 'Active',
-      prescribedBy: 'Dr. Marcus Vance, M.D., FACEP (Lead Flight Surgeon)',
-      clinicalRationale: 'Spinal column unloading preservation.',
-    });
-    setQuickResName('');
-    setQuickResDesc('');
-    setIsQuickRestrictionOpen(false);
-  };
+  const profilePageContent = (
+    <>
+      {isEditingInline && (
+        <div className="p-4 rounded-xl bg-[#FF8C00]/20 border border-[#FF8C00]/50 text-[#FFB347] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-[0_0_25px_rgba(255,140,0,0.3)] backdrop-blur-md">
+          <div className="flex items-center gap-3 text-sm font-mono">
+            <Sliders className="w-5 h-5 text-[#FF8C00] shrink-0" />
+            <span className="text-white">
+              <strong className="text-[#FF8C00]">INLINE EDIT MODE ENGAGED:</strong> Adjust sliders, type new values, or add allergies directly.
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => handleSaveProfile()}
+              disabled={isSaving}
+              className="px-4 py-2 rounded-lg bg-[#FF8C00] text-black font-mono font-extrabold text-xs sm:text-sm hover:bg-[#FF8C00]/90 transition-colors shadow-md cursor-pointer"
+            >
+              {isSaving ? 'SAVING...' : 'SAVE CHANGES'}
+            </button>
+            <button
+              onClick={() => setIsEditingInline(false)}
+              className="px-4 py-2 rounded-lg bg-slate-900 text-slate-200 font-mono text-xs sm:text-sm hover:bg-slate-800 transition-colors border border-slate-700 cursor-pointer"
+            >
+              CANCEL
+            </button>
+          </div>
+        </div>
+      )}
 
-  // Quick Note Submit
-  const handleQuickNoteSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!quickNoteTitle.trim() || !quickNoteContent.trim()) return;
-    handleAddDoctorNote({
-      astronautId: profile.id,
-      astronautName: profile.name,
-      author: 'Dr. Marcus Vance, M.D., FACEP (Lead Flight Surgeon)',
-      category: quickNoteCategory,
-      title: quickNoteTitle.trim(),
-      content: quickNoteContent.trim(),
-      relatedSymptoms: ['Lumbar Spine (L3-L5)'],
-      vitalsSnapshot: vitals ? {
-        hr: vitals.heartRate,
-        bp: `${vitals.bloodPressureSys}/${vitals.bloodPressureDia}`,
-        spo2: vitals.spO2,
-        temp: vitals.temperature,
-      } : undefined,
-      status: 'Finalized',
-    });
-    setQuickNoteTitle('');
-    setQuickNoteContent('');
-    setIsQuickNoteOpen(false);
-  };
-
-  const activeRestrictionsCount = restrictions.filter((r) => r.status === 'Active').length;
-  const unreadCommsCount = conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
-
-  // ── Auth Gate ────────────────────────────────────────────
-  if (!authUser) {
-    return <AuthPage onLogin={setAuthUser} />;
-  }
-  if (authUser.role === 'astronaut') {
-    return <AstronautApp user={authUser} onLogout={handleLogout} />;
-  }
-
-  return (
-    <div
-      className="min-h-screen text-slate-100 relative selection:bg-[#00E5FF]/30 selection:text-[#00E5FF]"
-      style={{
-        backgroundImage: "url('/assets/aistudio/3d-rendering-dark-earth-space_2c80c4c8.jpg')",
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundAttachment: 'fixed',
-        backgroundRepeat: 'no-repeat',
-        backgroundColor: '#050810',
-      }}
-    >
-      {/* Dark Translucent Backdrop Filter */}
-      <div
-        className="fixed inset-0 pointer-events-none z-0 transition-opacity duration-300"
-        style={{ backgroundColor: 'rgba(5, 8, 16, 0.40)' }}
+      <AstronautHeader
+        profile={profile}
+        isEditing={isEditingInline}
+        onToggleEdit={() => setIsEditingInline((prev) => !prev)}
+        onSave={() => handleSaveProfile()}
+        onReset={handleResetProfile}
+        onPhotoUpload={handlePhotoUpload}
+        isSaving={isSaving}
       />
 
-      {/* Dynamic Animated Canvas Space Background */}
-      <SpaceBackground />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-2 text-xs sm:text-sm font-mono text-slate-200">
+        <div className="flex items-center gap-3">
+          <span className="text-[#00E5FF] font-bold">PAGE: ASTRONAUT PROFILE (PHASE 1)</span>
+          <span className="text-slate-500">·</span>
+          <span className="text-slate-200">TELEMETRY: 1-HZ REALTIME</span>
+          <span className="text-slate-500 hidden md:inline">·</span>
+          <span className="text-slate-300 hidden md:inline">
+            LAST SYNC: {new Date(profile.updatedAt || Date.now()).toLocaleTimeString()}
+          </span>
+        </div>
 
-      {/* Main Container */}
-      <div className="relative z-10 flex flex-col min-h-screen">
-        {/* Top Flight Surgeon Mission Control Header */}
-        <FlightSurgeonHeader
-          currentTab={currentTab}
-          onSelectTab={setCurrentTab}
-          profile={profile}
-          unreadCount={unreadCommsCount}
-          onLogout={handleLogout}
-        />
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsContextModalOpen(true)}
+            className="px-3.5 py-1.5 rounded-lg bg-[#00E5FF]/15 hover:bg-[#00E5FF]/25 border border-[#00E5FF]/45 text-[#00E5FF] flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(0,229,255,0.2)] text-xs font-bold cursor-pointer"
+          >
+            <BookOpen className="w-4 h-4 text-[#00E5FF]" />
+            <span>Clinical Briefing</span>
+          </button>
 
-        {/* Content Layout: Left Sidebar + Main Content */}
-        <div className="flex-1 flex flex-row">
-          <FlightSurgeonSidebar
-            currentTab={currentTab}
-            onSelectTab={setCurrentTab}
-            activeRestrictionsCount={activeRestrictionsCount}
-            unreadCommsCount={unreadCommsCount}
-            pendingAlertsCount={alerts.filter((a) => !a.isAcknowledged).length}
-          />
-
-          <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 max-w-7xl mx-auto w-full space-y-6">
-            {/* View 1: Mission Overview (Main Dashboard) */}
-            {currentTab === 'overview' && (
-              <DashboardOverviewPage
-                crew={crew}
-                profile={profile}
-                vitals={vitals}
-                restrictions={restrictions}
-                timeline={timeline}
-                alerts={alerts}
-                onSelectAstronaut={handleSelectAstronaut}
-                onNavigateTab={setCurrentTab}
-              />
-            )}
-
-            {/* View 2: Astronaut Monitoring Matrix */}
-            {currentTab === 'monitoring' && (
-              <AstronautMonitoringPage
-                crew={crew}
-                currentProfile={profile}
-                onSelectAstronaut={handleSelectAstronaut}
-                onOpenDetailedProfile={handleSelectAstronaut}
-              />
-            )}
-
-            {/* View 3: Individual Astronaut Medical Profile (6-Tab Deep Medical Profile) */}
-            {(currentTab === 'individual' || currentTab === 'profile') && (
-              <IndividualAstronautProfile
-                profile={profile}
-                vitals={vitals}
-                symptoms={symptoms}
-                restrictions={restrictions}
-                timeline={timeline}
-                exercises={exercises}
-                notes={notes}
-                onBackToCrew={() => setCurrentTab('monitoring')}
-                onOpenRestrictionModal={() => setIsQuickRestrictionOpen(true)}
-                onOpenNoteModal={() => setIsQuickNoteOpen(true)}
-                onUpdateSymptomStatus={handleUpdateSymptomStatus}
-                onLiftRestriction={(id) => handleUpdateRestriction(id, { status: 'Lifted' })}
-                onNavigateTab={setCurrentTab}
-              />
-            )}
-
-            {/* View 4: Health Analytics */}
-            {currentTab === 'analytics' && (
-              <HealthAnalyticsPage
-                profile={profile}
-                vitals={vitals}
-                crew={crew}
-                onNavigateTab={setCurrentTab}
-              />
-            )}
-
-            {/* View 5: Medical Records & Doctor Notes */}
-            {currentTab === 'records' && (
-              <MedicalRecordsPage
-                notes={notes}
-                symptoms={symptoms}
-                crew={crew}
-                currentProfile={profile}
-                vitals={vitals}
-                onSaveNote={handleAddDoctorNote}
-                onUpdateNote={handleUpdateDoctorNote}
-                onUpdateSymptomStatus={handleUpdateSymptomStatus}
-              />
-            )}
-
-            {/* View 6: Exercise Monitoring */}
-            {currentTab === 'exercise' && (
-              <ExerciseMonitoringPage
-                exercises={exercises}
-                profile={profile}
-                onNavigateToRestrictions={() => setCurrentTab('restrictions')}
-              />
-            )}
-
-            {/* View: Space Nutrition & Galley Module (NutriLog) */}
-            {currentTab === 'nutrition' && (
-              <NutriLogPage profile={profile} />
-            )}
-
-            {/* View 7: Medical Restrictions */}
-            {currentTab === 'restrictions' && (
-              <MedicalRestrictionsPage
-                restrictions={restrictions}
-                crew={crew}
-                exercises={exercises}
-                onAddRestriction={handleAddRestriction}
-                onUpdateRestriction={handleUpdateRestriction}
-                onDeleteRestriction={handleDeleteRestriction}
-              />
-            )}
-
-            {/* View 8: Medical Reports */}
-            {currentTab === 'reports' && (
-              <MedicalReportsPage
-                crew={crew}
-                profile={profile}
-                vitals={vitals}
-                symptoms={symptoms}
-                restrictions={restrictions}
-                notes={notes}
-                onNavigateToAstronaut={handleSelectAstronaut}
-              />
-            )}
-
-            {/* View 9: Medical Communications (3-Panel Traditional Messaging System) */}
-            {currentTab === 'communications' && (
-              <MedicalCommunicationsPage
-                conversations={conversations}
-                activeConversationId={activeConversationId}
-                onSelectConversation={setActiveConversationId}
-                messages={messages}
-                onSendMessage={handleSendMessage}
-              />
-            )}
-
-            {/* View 10: Medical Alerts Center */}
-            {currentTab === 'alerts' && (
-              <MedicalAlertsPage
-                alerts={alerts}
-                crew={crew}
-                onAcknowledgeAlert={handleAcknowledgeAlert}
-                onDismissAlert={handleDismissAlert}
-                onNavigateToAstronaut={handleSelectAstronaut}
-                onNavigateToRestrictions={() => setCurrentTab('restrictions')}
-              />
-            )}
-
-            {/* Mission Control Footer */}
-            <footer className="pt-8 pb-12 border-t border-slate-800/80 text-xs font-mono text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-4 print:hidden">
-              <div className="flex items-center gap-2.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#00E5FF] shadow-[0_0_10px_#00E5FF]" />
-                <span className="text-white font-bold">ASTRA // NASA SPACE APPS CHALLENGE</span>
-                <span>— Astronaut Smart Health Monitoring System</span>
-              </div>
-              <div className="flex items-center gap-4 text-slate-300">
-                <span className="text-[#FF8C00] font-semibold">SIMULATED DEMONSTRATION DATA</span>
-                <span>·</span>
-                <span className="text-white">JSC FLIGHT MEDICINE REGISTRY · EXP-74</span>
-              </div>
-            </footer>
-          </main>
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(true)}
+            className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-[#00E5FF]/45 text-white flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(0,229,255,0.2)] text-xs font-bold cursor-pointer"
+          >
+            <Edit3 className="w-4 h-4 text-[#00E5FF]" />
+            <span>Full Edit Dialog</span>
+          </button>
         </div>
       </div>
 
-      {/* Quick Restriction Dialog */}
-      {isQuickRestrictionOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="relative w-full max-w-lg rounded-2xl bg-[#091129] border border-[#FF8C00]/50 shadow-[0_0_50px_rgba(255,140,0,0.3)] p-6 text-slate-100 font-mono text-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="w-5 h-5 text-[#FF8C00]" />
-                <h3 className="text-sm font-bold text-white font-['Chakra_Petch',sans-serif]">
-                  Prescribe Countermeasure Restriction ({profile.callsign})
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsQuickRestrictionOpen(false)}
-                className="p-1 rounded text-slate-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      <CrewDossierCard
+        profile={profile}
+        isEditing={isEditingInline}
+        onChange={handleFieldChange}
+      />
 
-            <form onSubmit={handleQuickRestrictionSubmit} className="mt-4 space-y-3.5">
-              <div>
-                <label className="block text-slate-400 mb-1">RESTRICTION NAME</label>
-                <input
-                  type="text"
-                  value={quickResName}
-                  onChange={(e) => setQuickResName(e.target.value)}
-                  placeholder="e.g. Axial Spinal Loading Restriction"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:border-[#FF8C00] focus:outline-none"
-                  required
-                />
-              </div>
+      <ClinicalAdaptationsCard
+        profile={profile}
+        isEditing={isEditingInline}
+        onSpineChange={(val) => handleFieldChange('spineElongation', val)}
+        onBloodTypeChange={(val) => handleFieldChange('bloodType', val)}
+        onAddAllergy={handleAddAllergy}
+        onRemoveAllergy={handleRemoveAllergy}
+        onAddCondition={handleAddCondition}
+        onRemoveCondition={handleRemoveCondition}
+        onOpenContextModal={() => setIsContextModalOpen(true)}
+      />
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1">AFFECTED REGION</label>
-                  <input
-                    type="text"
-                    value={quickResRegion}
-                    onChange={(e) => setQuickResRegion(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:border-[#FF8C00] focus:outline-none"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">SEVERITY</label>
-                  <select
-                    value={quickResSeverity}
-                    onChange={(e) => setQuickResSeverity(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-bold focus:border-[#FF8C00] focus:outline-none"
-                  >
-                    <option value="High">High</option>
-                    <option value="Moderate">Moderate</option>
-                    <option value="Low">Low</option>
-                  </select>
-                </div>
-              </div>
+      <SurgeonLinkCard
+        surgeon={profile.assignedSurgeon}
+        isEditing={isEditingInline}
+        onSurgeonChange={handleSurgeonChange}
+        onSendPingToast={(msg) => triggerToast(msg, 'success')}
+        onOpenComms={() => navigate('/comms')}
+      />
+    </>
+  );
 
-              <div>
-                <label className="block text-slate-400 mb-1">PROHIBITED EXERCISES (COMMA SEPARATED)</label>
-                <input
-                  type="text"
-                  value={quickResExercises}
-                  onChange={(e) => setQuickResExercises(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:border-[#FF8C00] focus:outline-none"
-                  required
-                />
-              </div>
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginRoute />} />
 
-              <div>
-                <label className="block text-slate-400 mb-1">DESCRIPTION</label>
-                <textarea
-                  value={quickResDesc}
-                  onChange={(e) => setQuickResDesc(e.target.value)}
-                  rows={2}
-                  placeholder="Hold parameters..."
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-sans focus:border-[#FF8C00] focus:outline-none"
-                />
-              </div>
+      <Route
+        element={
+          <RequireAuth>
+            <Layout
+              profile={profile}
+              isEditingInline={isEditingInline}
+              onToggleEdit={() => setIsEditingInline((prev) => !prev)}
+              onSaveProfile={handleSaveProfile}
+              isModalOpen={isModalOpen}
+              onCloseModal={() => setIsModalOpen(false)}
+              isContextModalOpen={isContextModalOpen}
+              onCloseContextModal={() => setIsContextModalOpen(false)}
+              isRoleModalOpen={isRoleModalOpen}
+              onOpenRoleModal={() => setIsRoleModalOpen(true)}
+              onCloseRoleModal={() => setIsRoleModalOpen(false)}
+              toastMessage={toastMessage}
+            />
+          </RequireAuth>
+        }
+      >
+        <Route path="/" element={<Navigate to="/profile" replace />} />
+        <Route path="/profile" element={profilePageContent} />
+        <Route
+          path="/vitals"
+          element={
+            <VitalSignsPage
+              profile={profile}
+              onNavigateToCheckin={() => navigate('/checkin')}
+            />
+          }
+        />
+        <Route
+          path="/checkin"
+          element={
+            <DailyCheckinPage
+              profile={profile}
+              onNavigateToTimeline={() => navigate('/timeline')}
+            />
+          }
+        />
+        <Route path="/fitness" element={<FitnessPage profile={profile} />} />
+        <Route path="/mental-wellness" element={<MentalWellnessPage profile={profile} />} />
+        <Route path="/3d-body" element={<InteractiveBodyPage profile={profile} />} />
+        <Route path="/symptoms" element={<Navigate to="/3d-body" replace />} />
+        <Route
+          path="/digital-twin"
+          element={
+            <DigitalTwinPage
+              profile={profile}
+              onSendToast={triggerToast}
+              onNavigateToTab={navigateByTab}
+            />
+          }
+        />
+        <Route path="/twin" element={<Navigate to="/digital-twin" replace />} />
+        <Route
+          path="/timeline"
+          element={
+            <UnifiedTimelinePage
+              profile={profile}
+              onNavigateToTab={navigateByTab}
+            />
+          }
+        />
+        <Route
+          path="/comms"
+          element={
+            <CommsHubPage
+              profile={profile}
+              onSendToast={triggerToast}
+            />
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <MedicalReportsPage
+              profile={profile}
+              onSendToast={triggerToast}
+            />
+          }
+        />
+        <Route
+          path="/environment"
+          element={
+            <MissionEnvironmentPage
+              profile={profile}
+              onSendToast={triggerToast}
+            />
+          }
+        />
+        <Route
+          path="/surgeon-overview"
+          element={
+            <DashboardOverviewPage
+              crew={crew}
+              profile={profile}
+              vitals={vitals}
+              restrictions={restrictions}
+              timeline={timeline}
+              alerts={alerts}
+              onSelectAstronaut={(id) => {
+                setSelectedAstronautId(id);
+                navigate('/surgeon-profile');
+              }}
+              onNavigateTab={navigateByTab}
+            />
+          }
+        />
+        <Route
+          path="/surgeon-profile"
+          element={
+            <IndividualAstronautProfile
+              profile={profile}
+              vitals={vitals}
+              symptoms={symptoms}
+              restrictions={restrictions.filter((r) => r.astronautId === selectedAstronautId)}
+              timeline={timeline}
+              exercises={exercises}
+              notes={notes.filter((n) => n.astronautId === selectedAstronautId)}
+              onBackToCrew={() => navigate('/surgeon-overview')}
+              onOpenRestrictionModal={() => navigate('/fitness')}
+              onOpenNoteModal={() => navigate('/reports')}
+              onNavigateTab={navigateByTab}
+            />
+          }
+        />
+        <Route
+          path="/medical-assistant"
+          element={
+            <MedicalAssistantPage
+              crew={crew}
+              initialAstronautId={selectedAstronautId}
+              onDataSyncNeeded={fetchSurgeonData}
+              onNavigateTab={navigateByTab}
+              onOpenAstronautProfile={(id) => {
+                setSelectedAstronautId(id);
+                navigate('/surgeon-profile');
+              }}
+            />
+          }
+        />
+        <Route path="*" element={<Navigate to="/profile" replace />} />
+      </Route>
+    </Routes>
+  );
+}
 
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsQuickRestrictionOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-900 text-slate-300 font-bold hover:bg-slate-800"
-                >
-                  CANCEL
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-[#FF8C00] text-black font-extrabold hover:bg-[#FF8C00]/90"
-                >
-                  SIGN & PRESCRIBE
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Quick Note Dialog */}
-      {isQuickNoteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="relative w-full max-w-lg rounded-2xl bg-[#091129] border border-[#00E5FF]/50 shadow-[0_0_50px_rgba(0,229,255,0.3)] p-6 text-slate-100 font-mono text-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Plus className="w-5 h-5 text-[#00E5FF]" />
-                <h3 className="text-sm font-bold text-white font-['Chakra_Petch',sans-serif]">
-                  Record Clinical Note ({profile.name})
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsQuickNoteOpen(false)}
-                className="p-1 rounded text-slate-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleQuickNoteSubmit} className="mt-4 space-y-3.5">
-              <div>
-                <label className="block text-slate-400 mb-1">NOTE TITLE</label>
-                <input
-                  type="text"
-                  value={quickNoteTitle}
-                  onChange={(e) => setQuickNoteTitle(e.target.value)}
-                  placeholder="e.g. Lumbar Ache Assessment & CEVIS Clearance"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:border-[#00E5FF] focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1">CATEGORY</label>
-                <select
-                  value={quickNoteCategory}
-                  onChange={(e) => setQuickNoteCategory(e.target.value as any)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-bold focus:border-[#00E5FF] focus:outline-none"
-                >
-                  <option value="Routine Assessment">Routine Assessment</option>
-                  <option value="Adaptation Review">Adaptation Review</option>
-                  <option value="Countermeasure Directive">Countermeasure Directive</option>
-                  <option value="Pre-EVA Medical Clearance">Pre-EVA Medical Clearance</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1">CLINICAL OBSERVATION</label>
-                <textarea
-                  value={quickNoteContent}
-                  onChange={(e) => setQuickNoteContent(e.target.value)}
-                  rows={3}
-                  placeholder="State clinical observations, vitals correlations, and guidance..."
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-sans focus:border-[#00E5FF] focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsQuickNoteOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-900 text-slate-300 font-bold hover:bg-slate-800"
-                >
-                  CANCEL
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-[#00E5FF] text-black font-extrabold hover:bg-[#00E5FF]/90"
-                >
-                  COMMIT NOTE
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Floating HUD Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-xl bg-[#080e22]/95 border-2 border-[#00E5FF]/60 text-white shadow-[0_0_35px_rgba(0,229,255,0.45)] backdrop-blur-xl font-mono text-xs sm:text-sm font-semibold animate-in fade-in slide-in-from-bottom-3 duration-200">
-          {toastMessage.type === 'success' && <CheckCircle className="w-4 h-4 text-[#10b981] shrink-0" />}
-          {toastMessage.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
-          {toastMessage.type === 'info' && <Sparkles className="w-4 h-4 text-[#00E5FF] shrink-0" />}
-          <span>{toastMessage.text}</span>
-        </div>
-      )}
-    </div>
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

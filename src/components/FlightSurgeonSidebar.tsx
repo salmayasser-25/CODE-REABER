@@ -4,7 +4,6 @@ import {
   Users, 
   Activity, 
   FileText, 
-  Dumbbell, 
   ShieldAlert, 
   AlertCircle,
   FileCheck, 
@@ -12,7 +11,7 @@ import {
   Orbit,
   Stethoscope,
   Radio,
-  ChefHat
+  Bot
 } from 'lucide-react';
 
 interface FlightSurgeonSidebarProps {
@@ -68,20 +67,6 @@ export const FlightSurgeonSidebar: React.FC<FlightSurgeonSidebarProps> = ({
       badge: 'CLINICAL',
     },
     {
-      id: 'exercise',
-      label: 'Exercise Monitoring',
-      sublabel: 'ARED / CEVIS Countermeasures',
-      icon: Dumbbell,
-      badge: 'WORKOUT',
-    },
-    {
-      id: 'nutrition',
-      label: 'Space Nutrition & Galley',
-      sublabel: 'NutriLog, Smart Fridge & Stock',
-      icon: ChefHat,
-      badge: 'GALLEY',
-    },
-    {
       id: 'restrictions',
       label: 'Medical Restrictions',
       sublabel: 'Safety Protocols & Holds',
@@ -103,6 +88,14 @@ export const FlightSurgeonSidebar: React.FC<FlightSurgeonSidebarProps> = ({
       icon: MessagesSquare,
       badge: unreadCommsCount > 0 ? `${unreadCommsCount} UNREAD` : 'COMMS',
       badgeColor: unreadCommsCount > 0 ? 'bg-[#00E5FF] text-black font-extrabold shadow-[0_0_10px_#00E5FF]' : 'bg-slate-800 text-slate-400',
+    },
+    {
+      id: 'assistant',
+      label: 'AI Medical Assistant',
+      sublabel: 'Triage Copilot & Vital Sync',
+      icon: Bot,
+      badge: 'AI TRIAGE',
+      badgeColor: 'bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/50 font-bold',
     },
   ];
 

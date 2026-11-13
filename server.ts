@@ -2,12 +2,17 @@ import 'dotenv/config';
 import express from 'express';
 import type { Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import Groq from 'groq-sdk';
 import { UpdateProfileSchema } from './src/types/astronaut.ts';
-import type { ExerciseCategory, FitnessAIAnalysis } from './src/types/astronaut.ts';
-import {
-  getProfile,
+import type {
+  ExerciseCategory,
+  FitnessAIAnalysis,
+  MedicalAssistantContext,
+  AssistantTriageLevel,
+} from './src/types/astronaut.ts';
+import { 
+  getProfile, 
   updateProfile,
   getVitals,
   updateVitals,
@@ -21,6 +26,8 @@ import {
   getExercises,
   getExercisesByCategory,
   evaluateExercisesForAstronaut,
+  getWorkoutSessions,
+  logWorkoutSession,
   getCrewMembers,
   getRestrictions,
   addRestriction,
@@ -41,15 +48,26 @@ import {
   reviewExchangedReport,
   forwardExchangedReport,
   deleteExchangedReport,
-  addTimelineEvent,
+  getMedicalAssistantContext,
+  getActiveChannelForAstronaut,
+  getDoctorAvailabilityConfig,
+  setDoctorAvailabilityConfig,
+  addChannelMessage,
+  getAuthorizedAiHistory,
+  getDoctorHistory,
+  clearChannelHistory,
+  startOrPreserveDoctorWaitTimer,
+  recordSurgeonReplyToDoctorChat,
+  activateEmergencySession,
+  acknowledgeEmergencySession,
+  notifySurgeonOfAiTakeover,
+  formatTimeoutDurationText,
+  currentDoctorTimers,
+  currentDoctorAvailability,
+  detectEmergencyAndConcerningVitals,
+  escalateMedicalIssueToTeam,
+  postAstronautDirectToSurgeon,
 } from './src/server/mockDb.ts';
-import {
-  getNutritionInventory,
-  getDailyNutritionLog,
-  takeNutrientItem,
-  logHydration,
-  getInventoryAlerts,
-} from './src/server/nutriDb.ts';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -93,8 +111,8 @@ async function resolveGroqModel(groq: Groq): Promise<string> {
       lastGroqModelCheck = now;
       return fallbackTextModel;
     }
-  } catch (err: any) {
-    console.warn('[Groq Model Discovery Warning]:', err?.message);
+  } catch {
+    // Use default fallback model ID
   }
   return 'qwen/qwen3.8-27b';
 }
@@ -125,6 +143,17 @@ app.use('/models', express.static('public/models', {
     if (path.endsWith('.glb')) {
       res.setHeader('Content-Type', 'model/gltf-binary');
       res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+  }
+}));
+
+// Serve local workout videos and images statically
+app.use('/images', express.static('public/images'));
+app.use('/videos', express.static('public/videos', {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.mp4')) {
+      res.setHeader('Content-Type', 'video/mp4');
+      res.setHeader('Accept-Ranges', 'bytes');
     }
   }
 }));
@@ -182,7 +211,7 @@ app.post('/api/profile/reset', (_req: Request, res: Response) => {
       role: 'Mission Specialist / Payload Bio-Engineer',
       missionId: 'EXP-74 / ARTEMIS BIO-LAB',
       healthStatus: 'nominal',
-      photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+      photoUrl: '/images/astronaut_salma_portrait.jpg',
       totalEvaHours: 28.5,
       bloodType: 'O-Positive (O+)',
       spineElongation: 4.2,
@@ -257,6 +286,145 @@ app.post('/api/vitals/log', (req: Request, res: Response) => {
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error?.message || 'Failed to log daily vitals' });
+  }
+});
+
+// GET /api/nasa/donki — NASA Space Weather Database Of Notifications, Knowledge, Information (DONKI)
+app.get('/api/nasa/donki', async (_req: Request, res: Response) => {
+  try {
+    const apiKey = process.env.NASA_API_KEY || 'DEMO_KEY';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    const nasaUrl = `https://api.nasa.gov/DONKI/notifications?api_key=${apiKey}`;
+    const response = await fetch(nasaUrl, {
+      signal: controller.signal,
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+    clearTimeout(timeout);
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return res.json({
+          success: true,
+          source: 'NASA DONKI API (api.nasa.gov)',
+          timestamp: new Date().toISOString(),
+          data: data.slice(0, 8),
+        });
+      }
+    }
+    throw new Error(`NASA DONKI returned HTTP ${response.status}`);
+  } catch {
+    const fallbackDonki = [
+      {
+        messageType: 'RBE',
+        messageID: '20261105-AL-001',
+        messageURL: 'https://ccmc.gsfc.nasa.gov/DONKI/view/Alert/49388/1',
+        messageIssueTime: new Date(Date.now() - 3600000 * 4).toISOString(),
+        messageBody:
+          "## Summary:\nSignificantly elevated energetic electron fluxes in the Earth's outer radiation belt. GOES greater than 2.0 MeV integral electron flux remains elevated, crossing the threshold of 1000 pfu. Spacecraft in LEO orbits nominal, radiation shielding countermeasure holding at 99.4% attenuation.",
+      },
+      {
+        messageType: 'FLR',
+        messageID: '20261104-FLR-002',
+        messageURL: 'https://ccmc.gsfc.nasa.gov/DONKI/view/Alert/49382/1',
+        messageIssueTime: new Date(Date.now() - 3600000 * 18).toISOString(),
+        messageBody:
+          '## Summary:\nModerate M-class Solar Flare detected from Active Region 3889 at 2026-11-04T18:24Z. No geomagnetic storming expected at LEO. EVA telemetry verified nominal.',
+      },
+      {
+        messageType: 'CME',
+        messageID: '20261103-CME-001',
+        messageURL: 'https://ccmc.gsfc.nasa.gov/DONKI/view/Alert/49375/1',
+        messageIssueTime: new Date(Date.now() - 3600000 * 36).toISOString(),
+        messageBody:
+          '## Summary:\nCoronal Mass Ejection observed by SOHO/LASCO C2. Trajectory modeled by NASA CCMC indicates glancing angle with Earth magnetosphere. Space station orbital shielding verified.',
+      },
+    ];
+    res.json({
+      success: true,
+      source: 'NASA DONKI Space Weather Registry (Cached Telemetry)',
+      timestamp: new Date().toISOString(),
+      data: fallbackDonki,
+    });
+  }
+});
+
+// POST /api/simulator/run — Digital Twin Biomechanical Risk Simulator
+app.post('/api/simulator/run', (req: Request, res: Response) => {
+  try {
+    const {
+      actionId = 'ared-squat',
+      weightKg = 120,
+      pressurePsi = 4.3,
+      treadmillSpeedKmh = 12,
+      profile,
+    } = req.body;
+    const spineDelta = profile?.spineElongation || 4.2;
+
+    let result = {
+      actionId: 'ared-squat',
+      actionName: 'ARED Barbell Squat (Heavy Axial Load)',
+      riskLevel: 'CRITICAL',
+      riskColor: 'rose',
+      probability: '85%',
+      targetZone: 'lumbar',
+      affectedSystems: ['Lumbar Spine L4-L5', 'Intervertebral Discs', 'Annulus Fibrosus'],
+      predictedConsequence: `85% probability of disc herniation due to spine elongation (+${spineDelta}cm) + axial compression (${weightKg}kg barbell loading).`,
+      recommendation:
+        'ABORT ACTION. Proceed with Resistive Band Circuit or passive lumbar flexion countermeasure instead.',
+      aiExplanation: `Based on your current Spine Elongation (+${spineDelta}cm) and reported paraspinal tissue relaxation, executing a ${weightKg}kg axial load will exceed the safe disc pressure threshold (3,400 N peak vs 4,820 N simulated). This is a deterministic safety violation.`,
+      peakForceN: 4820,
+      safetyLimitN: 3400,
+      stressCoords: [0, 0.48, -0.06] as [number, number, number],
+      timestamp: new Date().toISOString(),
+    };
+
+    if (actionId === 'eva-suit') {
+      result = {
+        actionId: 'eva-suit',
+        actionName: 'EVA Suit Donning (High Pressure)',
+        riskLevel: 'MODERATE',
+        riskColor: 'amber',
+        probability: '68%',
+        targetZone: 'shoulders',
+        affectedSystems: ['Acromioclavicular Joint', 'Supraspinatus Tendon', 'Brachial Plexus'],
+        predictedConsequence: `68% risk of acromioclavicular impingement and soft tissue contusion at ${pressurePsi} psi suit pressure during unilateral shoulder abduction in microgravity.`,
+        recommendation:
+          'PROCEED WITH CAUTION. Engage two-crew assisted donning sequence and calibrate shoulder bearing rings.',
+        aiExplanation: `Donning the Extravehicular Mobility Unit (EMU) against a ${pressurePsi} psi pressure differential creates excessive shear stress on the deltoid and rotator cuff. Bilateral crew assistance reduces peak joint torque by 42%.`,
+        peakForceN: 1250,
+        safetyLimitN: 1100,
+        stressCoords: [0, 0.88, 0.08] as [number, number, number],
+        timestamp: new Date().toISOString(),
+      };
+    } else if (actionId === 'treadmill') {
+      result = {
+        actionId: 'treadmill',
+        actionName: 'High-Intensity Treadmill (Cardiovascular Stress)',
+        riskLevel: 'HIGH',
+        riskColor: 'rose',
+        probability: '74%',
+        targetZone: 'cardiovascular',
+        affectedSystems: ['Myocardial Oxygen Demand', 'Baroreceptor Reflex', 'Tibial Periosteum'],
+        predictedConsequence: `74% probability of exceeding target maximum heart rate (175 bpm) with secondary lower extremity impact stress on T2 treadmill bungee harness.`,
+        recommendation:
+          'MODIFY PROTOCOL. Reduce speed to 8.5 km/h and limit interval sprint duration to under 90 seconds.',
+        aiExplanation: `Microgravity cardiovascular deconditioning and cephalic fluid shift reduce left ventricular end-diastolic volume. High-intensity interval loading at ${treadmillSpeedKmh} km/h induces premature tachycardia and orthostatic stress.`,
+        peakForceN: 2400,
+        safetyLimitN: 2100,
+        stressCoords: [-0.08, 0.82, 0.14] as [number, number, number],
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Simulation execution failed' });
   }
 });
 
@@ -547,6 +715,9 @@ app.post('/api/communications/messages', (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'conversationId and content are required' });
     }
     const message = sendMedicalMessage(conversationId, content, messageType, priority);
+    if (conversationId === 'conv-astro-salma') {
+      clearServerTimeoutHandle('ASTRO-74-SJ');
+    }
     res.status(201).json({ success: true, data: message, message: 'Message transmitted via Ground Control Relay' });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error?.message || 'Failed to send message' });
@@ -731,6 +902,970 @@ app.delete('/api/reports/exchanged/:id', (req: Request, res: Response) => {
   }
 });
 
+// ─── AI Medical Assistant & Doctor Availability Engine ───────────────────────
+
+const MEDICAL_SAFETY_DISCLAIMER =
+  'IMPORTANT MEDICAL SAFETY NOTICE: ASTRA AI Medical Assistant provides temporary support only and is NOT a replacement for a qualified Flight Surgeon or physician. It does not provide definitive medical diagnoses and never prescribes medications or dosages.';
+
+const serverTimeoutHandles = new Map<string, ReturnType<typeof setTimeout>>();
+const timeoutExecutionLocks = new Set<string>();
+
+function clearServerTimeoutHandle(astronautId: string) {
+  const existing = serverTimeoutHandles.get(astronautId);
+  if (existing) {
+    clearTimeout(existing);
+    serverTimeoutHandles.delete(astronautId);
+  }
+}
+
+function isAuthorizedMedicalPersonnel(req: Request): boolean {
+  const cred = String(req.headers['x-surgeon-credential'] || '').trim();
+  const role = String(req.headers['x-user-role'] || '').trim();
+  return cred === 'NASA-FS-9842' || role === 'flight_surgeon' || role === 'medical_team';
+}
+
+function buildVerifiedRecordsList(context: MedicalAssistantContext): string[] {
+  const { astronaut, vitalsSnapshot, activeSymptoms, activeRestrictions } = context;
+  const records: string[] = [
+    `Verified Telemetry — Heart Rate: ${vitalsSnapshot.heartRate} bpm (${
+      astronaut.restingHeartRate !== null
+        ? `Recorded Flight Baseline: ${astronaut.restingHeartRate} bpm`
+        : 'Personal resting HR baseline: Not recorded in crew summary'
+    })`,
+    `Verified Telemetry — Blood Pressure: ${vitalsSnapshot.bloodPressure} mmHg`,
+    `Verified Telemetry — Oxygen Saturation (SpO2): ${vitalsSnapshot.spO2}%`,
+    `Verified Telemetry — Body Temperature: ${vitalsSnapshot.temperature}°C`,
+    `Verified Telemetry — Respiratory Rate: ${
+      vitalsSnapshot.respiratoryRate !== null
+        ? `${vitalsSnapshot.respiratoryRate} breaths/min`
+        : 'Not recorded in telemetry summary'
+    }`,
+    `Verified Telemetry — Recent Sleep: ${
+      vitalsSnapshot.sleepHours !== null
+        ? `${vitalsSnapshot.sleepHours} hours`
+        : 'Not recorded in telemetry summary'
+    }`,
+  ];
+
+  if (astronaut.spineElongation !== null) {
+    records.push(`Verified Bio-Record — Spine Elongation: +${astronaut.spineElongation} cm`);
+  }
+
+  records.push(
+    `Verified Medical History — Allergies: ${
+      astronaut.allergiesRecorded
+        ? astronaut.allergies.length > 0
+          ? astronaut.allergies.join(', ')
+          : 'None recorded'
+        : 'Not recorded in crew summary'
+    }`
+  );
+
+  records.push(
+    `Verified Medical History — Conditions: ${
+      astronaut.conditions.length > 0 ? astronaut.conditions.join('; ') : 'None recorded in summary'
+    }`
+  );
+
+  records.push(
+    `Verified Symptom Log: ${
+      activeSymptoms.length > 0
+        ? activeSymptoms
+            .map(
+              (s) =>
+                `${s.bodyPart} (${s.painType}${s.intensity > 0 ? `, ${s.intensity}/10` : ', numerical severity not scored'})`
+            )
+            .join('; ')
+        : 'No active symptoms logged'
+    }`
+  );
+
+  records.push(
+    `Verified Restrictions: ${
+      activeRestrictions.length > 0
+        ? activeRestrictions.map((r) => `${r.name} [${r.status}]`).join('; ')
+        : 'None active in record'
+    }`
+  );
+
+  return records;
+}
+
+function buildFollowUpQuestions(
+  message: string,
+  triage: ReturnType<typeof detectEmergencyAndConcerningVitals>
+): string[] {
+  if (triage.triageLevel === 'emergency') return [];
+
+  const lower = message.toLowerCase();
+  const questions: string[] = [];
+
+  const hasDuration = /\b(hour|hours|hr|hrs|minute|minutes|min|day|days|since|started|today|yesterday|week|just now|ago)\b/i.test(lower);
+  const hasSeverity = /\b(mild|slight|minor|moderate|severe|intense|\/10|little|bit)\b/i.test(lower);
+  const hasProgression = /\b(better|worse|worsening|same|steady|stable|improving|chang)\b/i.test(lower);
+
+  if (!hasDuration) {
+    questions.push('When did these symptoms start, and have they been continuous or coming and going?');
+  }
+  if (!hasSeverity || !hasProgression) {
+    questions.push('On a 1–10 scale, how intense do they feel right now, and are they staying steady or getting worse?');
+  }
+
+  if (/\b(dizzy|dizziness|lightheaded|vertigo|concentrat|focus|fatigue|tired|headache)\b/i.test(lower)) {
+    questions.push(
+      'Do symptoms change when shifting posture/head position or after fluids/food, and have you noticed any vision changes, fever, chest discomfort, or shortness of breath?'
+    );
+  } else if (/\b(back|lumbar|spine|neck|muscle|joint|ache|pain)\b/i.test(lower)) {
+    questions.push(
+      'Does the discomfort stay in one spot, or does it radiate with numbness, tingling, or weakness?'
+    );
+  } else if (questions.length < 2 && triage.needsFollowUpQuestions) {
+    questions.push('Have you noticed any new warning signs such as fever, nausea, vision changes, or breathing difficulty?');
+  }
+
+  return questions.slice(0, 3);
+}
+
+async function generateMedicalAssistantGuidance(params: {
+  message: string;
+  context: MedicalAssistantContext;
+  doctorStatus: string;
+  triggerReason: string;
+  extraContextMessages?: Array<{ sender: string; content: string }>;
+}) {
+  const { message, context, doctorStatus, triggerReason, extraContextMessages = [] } = params;
+  const triage = detectEmergencyAndConcerningVitals(message, context);
+  const {
+    triageLevel,
+    protocolBasis,
+    redFlags,
+    urgentFlags,
+    attentionFlags,
+    criticalVitals,
+    unusualVitals,
+  } = triage;
+
+  const isEmergency = triageLevel === 'emergency';
+  const isUrgent = triageLevel === 'urgent';
+  const isAttention = triageLevel === 'attention_required';
+  const verifiedRecordsUsed = buildVerifiedRecordsList(context);
+  const defaultFollowUps = buildFollowUpQuestions(message, triage);
+
+  let escalationTriggered = false;
+  let escalatedAlertId: string | undefined;
+
+  if (isEmergency) {
+    const reason =
+      [...redFlags, ...criticalVitals.map((v) => `${v.label}: ${v.value} ${v.unit}`)]
+        .slice(0, 2)
+        .join(' / ') || 'Critical physiological red flag';
+
+    const alert = escalateMedicalIssueToTeam({
+      context,
+      triageLevel: 'emergency',
+      reasonSummary: reason,
+      reportedSymptomText: message,
+    });
+    escalationTriggered = true;
+    escalatedAlertId = alert.id;
+  } else if (isUrgent) {
+    const reason =
+      [...urgentFlags, ...unusualVitals.map((v) => `${v.label} ${v.value}${v.unit}`)]
+        .slice(0, 2)
+        .join(' / ') || 'Concerning symptom progression requiring prompt evaluation';
+
+    const alert = escalateMedicalIssueToTeam({
+      context,
+      triageLevel: 'urgent',
+      reasonSummary: reason,
+      reportedSymptomText: message,
+    });
+    escalationTriggered = true;
+    escalatedAlertId = alert.id;
+  } else if (isAttention) {
+    const reason =
+      [...attentionFlags, ...unusualVitals.map((v) => `${v.label} ${v.value}${v.unit}`)]
+        .slice(0, 2)
+        .join(' / ') || 'Persistent or multi-symptom clinical presentation';
+
+    const alert = escalateMedicalIssueToTeam({
+      context,
+      triageLevel: 'attention_required',
+      reasonSummary: reason,
+      reportedSymptomText: message,
+    });
+    escalationTriggered = true;
+    escalatedAlertId = alert.id;
+  }
+
+  const systemInstruction = `You are the ASTRA AI Medical Assistant integrated into the NASA Expedition 74 Astronaut Health Monitoring System.
+You are speaking directly with Astronaut ${context.astronaut.name} (Callsign: ${context.astronaut.callsign}, Role: ${context.astronaut.role}).
+Doctor Availability Context: Flight Surgeon status is "${doctorStatus}". Trigger: "${triggerReason}".
+
+VERIFIED MEDICAL & TELEMETRY RECORDS (STRICTLY AUTHORITATIVE — NEVER INVENT MISSING VALUES):
+${verifiedRecordsUsed.map((r) => `- ${r}`).join('\n')}
+
+APPROVED 4-LEVEL MISSION TRIAGE PROTOCOL CLASSIFICATION:
+- Assigned Triage Level: ${triageLevel.toUpperCase()}
+- Protocol Basis: ${protocolBasis}
+${redFlags.length > 0 ? `- Level 4 Emergency Warning Signs: ${redFlags.join('; ')}` : ''}
+${urgentFlags.length > 0 ? `- Level 3 Urgent Flags: ${urgentFlags.join('; ')}` : ''}
+${attentionFlags.length > 0 ? `- Level 2 Attention Factors: ${attentionFlags.join('; ')}` : ''}
+
+CRITICAL CLINICAL & SAFETY RULES (NON-NEGOTIABLE):
+1. You provide temporary medical support ONLY. You are NOT a replacement for a qualified Flight Surgeon.
+2. NEVER provide definitive medical diagnoses. NEVER prescribe medications or dosages.
+3. FOUR-TIER CLASSIFICATION DISCIPLINE:
+   - Level 1 (LOW RISK): Mild isolated symptoms/questions without warning signs -> provide supportive initial guidance and monitor.
+   - Level 2 (ATTENTION REQUIRED): Persistent, moderate, or multi-symptom presentations (e.g., mild dizziness, fatigue, and difficulty concentrating without red flags) -> DO NOT treat as a life-threatening emergency; perform structured follow-up questioning and note that a non-emergency Flight Surgeon review request has been logged.
+   - Level 3 (URGENT): Progressive worsening, severe vertigo/inability to stand, persistent vomiting, high fever/pain (7-8/10), or presyncope -> state that the case has been escalated promptly to the Medical Team for evaluation.
+   - Level 4 (EMERGENCY): Life-threatening red flags or critical vitals -> state that immediate Emergency Escalation has ALREADY bypassed wait timers.
+4. NEVER assume that normal vital signs rule out a serious medical condition; explicitly note this caution when vitals are within reference limits alongside symptoms.
+5. NEVER invent patient data, sleep hours, resting HR baselines, allergies, or medical restrictions. If a record says "Not recorded", treat it as unknown and do not fabricate a number.
+6. CLEARLY SEPARATE AI-generated observations from verified medical records. Start each vital observation with "AI Observation:".
+7. Ask relevant follow-up questions in "followUpQuestions" whenever severity, onset, duration, or progression is unclear.`;
+
+  const combinedHistory = [
+    ...extraContextMessages.slice(-4),
+    ...context.history.slice(-6).map((h) => ({ sender: h.sender, content: h.content })),
+  ];
+
+  const geminiPrompt = `Previous Conversation Context (most recent turns):
+${combinedHistory.map((h) => `${h.sender.toUpperCase()}: ${h.content}`).join('\n')}
+
+CURRENT ASTRONAUT MESSAGE:
+"${message}"
+
+Respond in valid JSON matching the required schema.`;
+
+  const ai = getGeminiClient();
+  if (ai) {
+    try {
+      const response = await Promise.race([
+        ai.models.generateContent({
+          model: 'gemini-4-hydrogen',
+          contents: geminiPrompt,
+          config: {
+            systemInstruction,
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                reply: {
+                  type: Type.STRING,
+                  description:
+                    'Clear, calm, non-diagnostic clinical guidance matched to the 4-level triage classification without inventing unrecorded data or prescribing medications.',
+                },
+                vitalObservations: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description:
+                    '1 to 3 AI-generated observations (prefixed with "AI Observation:") interpreting recorded vitals while noting if normal vitals do not rule out clinical causes.',
+                },
+                followUpQuestions: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description:
+                    '1 to 3 targeted clinical follow-up questions about onset, duration, severity, progression, or warning signs when needed (empty array for immediate Level 4 emergency).',
+                },
+                firstAidSteps: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description:
+                    'Safe, non-pharmacological initial care or monitoring steps (never medication dosages).',
+                },
+                emergencyInstructions: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description:
+                    'Immediate life-safety emergency action steps ONLY if triageLevel is emergency, otherwise empty array.',
+                },
+              },
+              required: [
+                'reply',
+                'vitalObservations',
+                'followUpQuestions',
+                'firstAidSteps',
+                'emergencyInstructions',
+              ],
+            },
+          },
+        }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Gemini timeout')), 9000)),
+      ]);
+
+      const rawText = response.text?.trim();
+      if (rawText) {
+        const parsed = JSON.parse(rawText);
+        const guaranteedEmergencySteps =
+          isEmergency && (!Array.isArray(parsed.emergencyInstructions) || parsed.emergencyInstructions.length === 0)
+            ? [
+                'Stop all physical exertion or EVA/ARED activity immediately and stabilize yourself in a crew restraint.',
+                'Check cabin atmospheric O2 / CO2 readouts and apply supplemental emergency oxygen mask if breathing feels labored.',
+                'Keep your medical telemetry sensors attached — an urgent HIGH-PRIORITY alert has already been transmitted to the Flight Surgeon and Ground Medical Team.',
+                'Request immediate voice loop assistance from a crewmate aboard ISS Node 2 while MCC Flight Medicine connects.',
+              ]
+            : isEmergency
+            ? parsed.emergencyInstructions || []
+            : [];
+
+        const followUpQuestions = isEmergency
+          ? []
+          : Array.isArray(parsed.followUpQuestions) && parsed.followUpQuestions.length > 0
+          ? parsed.followUpQuestions
+          : defaultFollowUps;
+
+        return {
+          triageLevel: triageLevel as AssistantTriageLevel,
+          protocolBasis,
+          verifiedRecordsUsed,
+          reply: parsed.reply,
+          vitalObservations: Array.isArray(parsed.vitalObservations) ? parsed.vitalObservations : [],
+          followUpQuestions,
+          firstAidSteps: Array.isArray(parsed.firstAidSteps) ? parsed.firstAidSteps : [],
+          emergencyInstructions: guaranteedEmergencySteps,
+          escalationTriggered,
+          escalatedAlertId,
+          disclaimer: MEDICAL_SAFETY_DISCLAIMER,
+          source: 'gemini-4-hydrogen',
+        };
+      }
+    } catch (geminiErr: any) {
+      // Gracefully handled
+    }
+  }
+
+  // Clinical Safety Protocol Rule Engine Fallback (Zero fabrication, 4-tier strict separation)
+  const lower = message.toLowerCase();
+  const obs: string[] = context.vitalEvaluations
+    .filter((v) => v.status === 'critical' || v.status === 'unusual')
+    .map((v) => `AI Observation: ${v.label} is ${v.value}${v.unit ? ` ${v.unit}` : ''} (${v.note})`);
+
+  const recordedSummaryParts = [
+    `HR ${context.vitalsSnapshot.heartRate} bpm`,
+    `BP ${context.vitalsSnapshot.bloodPressure} mmHg`,
+    `SpO2 ${context.vitalsSnapshot.spO2}%`,
+    `Temp ${context.vitalsSnapshot.temperature}°C`,
+  ];
+  if (context.vitalsSnapshot.respiratoryRate !== null) {
+    recordedSummaryParts.push(`RR ${context.vitalsSnapshot.respiratoryRate} breaths/min`);
+  }
+
+  if (obs.length === 0) {
+    obs.push(
+      `AI Observation: Recorded core telemetry (${recordedSummaryParts.join(', ')}) falls within standard reference intervals; however, normal vital signs alone do not rule out an underlying medical condition or evolving symptoms.`
+    );
+  } else {
+    obs.push(
+      `AI Observation: Other recorded readings (${recordedSummaryParts.join(', ')}) are within reference ranges; normal individual values do not exclude medical evaluation when symptoms persist.`
+    );
+  }
+
+  if (context.vitalsSnapshot.respiratoryRate === null || context.vitalsSnapshot.sleepHours === null || context.astronaut.restingHeartRate === null) {
+    const missingFields: string[] = [];
+    if (context.vitalsSnapshot.respiratoryRate === null) missingFields.push('respiratory rate');
+    if (context.vitalsSnapshot.sleepHours === null) missingFields.push('sleep duration');
+    if (context.astronaut.restingHeartRate === null) missingFields.push('personal resting HR baseline');
+    obs.push(
+      `AI Observation: Note that ${missingFields.join(', ')} ${missingFields.length === 1 ? 'is' : 'are'} not recorded in this crew telemetry summary and therefore not assumed.`
+    );
+  }
+
+  if (isEmergency) {
+    return {
+      triageLevel: 'emergency' as const,
+      protocolBasis,
+      verifiedRecordsUsed,
+      reply: `LEVEL 4 EMERGENCY ESCALATION (${context.astronaut.callsign}): Based on the critical warning signs reported${redFlags.length ? ` (${redFlags.join(', ')})` : ''} and synchronized telemetry, this requires immediate Flight Surgeon intervention. I have bypassed all wait timers and dispatched a high-priority emergency alert to Dr. Marcus Vance and the Ground Medical Team.`,
+      vitalObservations: obs,
+      followUpQuestions: [],
+      firstAidSteps: [],
+      emergencyInstructions: [
+        'Halt all operational tasks immediately and secure yourself in a stable, resting posture.',
+        'Monitor breathing and check local cabin O2 / CO2 sensors; deploy supplemental oxygen from the Crew Medical Restraint System if short of breath.',
+        'Alert the nearest crewmate to retrieve the ISS Crew Health Care System (CHeCS) emergency medical kit and stand by on the voice loop.',
+        'Do not take unprescribed medications. Keep bio-telemetry patches attached while the Flight Surgeon establishes emergency uplink.',
+      ],
+      escalationTriggered,
+      escalatedAlertId,
+      disclaimer: MEDICAL_SAFETY_DISCLAIMER,
+      source: 'astra-clinical-safety-engine',
+    };
+  }
+
+  if (isUrgent) {
+    return {
+      triageLevel: 'urgent' as const,
+      protocolBasis,
+      verifiedRecordsUsed,
+      reply: `LEVEL 3 URGENT ASSESSMENT (${context.astronaut.callsign}): Your message indicates concerning features (${urgentFlags.join(', ') || 'worsening/high-severity symptoms'}) that require prompt medical evaluation. Because this is not currently classified as an immediate life-threatening emergency unless red flags develop, I have escalated a priority evaluation request to the Medical Team rather than triggering a critical emergency override. Please stabilize your position and answer the follow-up questions below.`,
+      vitalObservations: obs,
+      followUpQuestions: defaultFollowUps,
+      firstAidSteps: [
+        'Pause physical exertion, EVA prep, or resistive exercise and remain anchored in a stable resting position.',
+        'Check cabin CO2 and airflow readouts on your module console and take slow, steady breaths.',
+        'Avoid rapid head movements or unassisted module translation while dizzy or unsteady.',
+        'Trigger an immediate emergency alert or notify a crewmate right away if you develop chest pain, fainting, breathing difficulty, slurred speech, or sudden vision loss.',
+      ],
+      escalationTriggered,
+      escalatedAlertId,
+      disclaimer: MEDICAL_SAFETY_DISCLAIMER,
+      source: 'astra-clinical-safety-engine',
+    };
+  }
+
+  const firstAidSteps: string[] = [];
+  let reply = '';
+
+  if (isAttention) {
+    const factorsText = attentionFlags.length > 0 ? attentionFlags.join('; ') : 'combined or persistent symptoms';
+    reply = `LEVEL 2 ATTENTION REQUIRED (${context.astronaut.callsign}): I have reviewed your reported symptoms alongside your verified telemetry (${recordedSummaryParts.join(', ')}). Because you described ${factorsText} without critical red-flag warning signs, this is classified as Attention Required for Flight Surgeon medical review — NOT a critical emergency. Normal or stable vital signs do not rule out an underlying cause, so I have logged a review notice for Dr. Marcus Vance and listed clarifying questions below to refine your clinical picture.`;
+  } else {
+    reply = `LEVEL 1 LOW RISK (${context.astronaut.callsign}): Based on your message and verified telemetry (${recordedSummaryParts.join(', ')}), there are currently no warning signs requiring escalation. I cannot diagnose medical conditions or prescribe medications, and remember that normal vitals alone never rule out evolving symptoms — please monitor how you feel and answer the follow-up questions if anything remains unclear.`;
+  }
+
+  if (lower.includes('dizzy') || lower.includes('dizziness') || lower.includes('concentrat') || lower.includes('focus') || lower.includes('brain fog')) {
+    if (!isAttention) {
+      reply += ' Mild lightheadedness or reduced focus in orbit can be associated with hydration status, sleep quality, cabin CO2 pockets, or fluid shifts, though persistent symptoms merit clinician review.';
+    }
+    firstAidSteps.push(
+      'Check module ventilation airflow and cabin partial-pressure CO2 readouts at your workstation.',
+      'Hydrate gradually with water or an approved mission electrolyte drink and rest in a supported posture for 15–20 minutes.',
+      'Defer precision robotics or strenuous tasks until symptoms clear, and seek urgent help immediately if dizziness turns into spinning vertigo, fainting, chest pain, or vision changes.'
+    );
+  } else if (lower.includes('back') || lower.includes('lumbar') || lower.includes('spine') || lower.includes('ache')) {
+    const spineNote =
+      context.astronaut.spineElongation !== null
+        ? ` Verified records show +${context.astronaut.spineElongation} cm spinal elongation.`
+        : '';
+    reply += `${spineNote} Mild musculoskeletal discomfort in microgravity warrants careful observation and adherence to active exercise restrictions until reviewed by the Flight Surgeon.`;
+    firstAidSteps.push(
+      'Pause any axial-loading resistance exercises (such as squats or deadlifts) and avoid sudden spinal twisting during module translation.',
+      'Perform gentle, unloaded stretching only if it does not increase discomfort, or apply a warm compress pack for 15 minutes.',
+      'Report immediately if pain intensifies sharply or radiates with numbness or tingling down your legs.'
+    );
+  } else if (lower.includes('heart') || lower.includes('hr') || lower.includes('pulse') || lower.includes('sleep') || lower.includes('tired') || lower.includes('fatigue')) {
+    const baselineText =
+      context.astronaut.restingHeartRate !== null
+        ? ` compared to your recorded ${context.astronaut.restingHeartRate} bpm baseline`
+        : ' (personal resting baseline not recorded in summary)';
+    const sleepText =
+      context.vitalsSnapshot.sleepHours !== null
+        ? ` alongside ${context.vitalsSnapshot.sleepHours} hrs recorded sleep`
+        : '';
+    reply += ` Your current recorded heart rate is ${context.vitalsSnapshot.heartRate} bpm${baselineText}${sleepText}.`;
+    firstAidSteps.push(
+      'Hydrate slowly with 300–500 mL of water or an approved electrolyte beverage.',
+      'Rest quietly for 20–30 minutes using slow, steady breathing (4-second inhale / 6-second exhale).',
+      'Defer high-intensity physical tasks and monitor whether fatigue resolves or persists.'
+    );
+  } else if (lower.includes('headache') || lower.includes('sinus') || lower.includes('fluid')) {
+    firstAidSteps.push(
+      'Verify cabin ventilation airflow around your workstation and check CO2 levels on your module console.',
+      'Maintain steady hydration and avoid rapid head movements while translating between modules.',
+      'Alert the medical team promptly if headache becomes severe or is accompanied by fever, neck stiffness, or blurred vision.'
+    );
+  } else {
+    firstAidSteps.push(
+      'Maintain steady hydration and avoid strenuous tasks while monitoring your symptoms.',
+      'Keep wearable telemetry sensors attached so the Flight Surgeon has continuous readings.',
+      'Reply with answers to the follow-up questions above or report right away if any new or worsening symptoms develop.'
+    );
+  }
+
+  return {
+    triageLevel: triageLevel as AssistantTriageLevel,
+    protocolBasis,
+    verifiedRecordsUsed,
+    reply,
+    vitalObservations: obs,
+    followUpQuestions: defaultFollowUps,
+    firstAidSteps,
+    emergencyInstructions: [],
+    escalationTriggered,
+    escalatedAlertId,
+    disclaimer: MEDICAL_SAFETY_DISCLAIMER,
+    source: 'astra-clinical-safety-engine',
+  };
+}
+
+async function executeServerTimeoutTakeover(astronautId: string): Promise<boolean> {
+  if (timeoutExecutionLocks.has(astronautId)) return false;
+  const timer = currentDoctorTimers[astronautId];
+  if (!timer || !timer.isWaiting || timer.aiTakeoverActive || currentDoctorAvailability !== 'available') {
+    return false;
+  }
+  if (!timer.expiresAt || Date.now() < Date.parse(timer.expiresAt)) {
+    return false;
+  }
+
+  timeoutExecutionLocks.add(astronautId);
+  clearServerTimeoutHandle(astronautId);
+
+  try {
+    // Re-check inside lock to prevent duplicate AI takeover responses
+    if (!timer.isWaiting || timer.aiTakeoverActive || currentDoctorAvailability !== 'available') {
+      return false;
+    }
+
+    const timeoutSeconds = timer.timeoutSeconds;
+    const timeoutLabel = formatTimeoutDurationText(timeoutSeconds);
+    const triggerText = timer.triggerMessageContent || 'Unanswered astronaut health inquiry';
+    const priorDoctorContext = getDoctorHistory(astronautId)
+      .slice(-5)
+      .map((m) => ({ sender: m.senderName, content: m.content }));
+
+    timer.isWaiting = false;
+    timer.aiTakeoverActive = true;
+    timer.aiTakeoverAt = new Date().toISOString();
+    timer.aiTakeoverReason = `Flight Surgeon did not respond within ${timeoutLabel}. AI Medical Assistant temporarily activated.`;
+
+    // 1. Add system notice to AI channel ONLY (never mixes with Doctor Chat)
+    addChannelMessage(astronautId, 'ai', {
+      sender: 'system',
+      senderId: 'astra-availability-monitor',
+      senderName: 'ASTRA Availability Monitor',
+      content: `Flight Surgeon Dr. Marcus Vance did not respond within ${timeoutLabel}. ASTRA AI Medical Assistant is now temporarily active to support you with your earlier message: "${triggerText}"`,
+      triageLevel: 'attention_required',
+    });
+
+    // 2. Preserve context & generate single initial AI guidance in AI channel
+    const context = getMedicalAssistantContext(astronautId);
+    const guidance = await generateMedicalAssistantGuidance({
+      message: triggerText,
+      context,
+      doctorStatus: 'timeout_takeover',
+      triggerReason: `No Flight Surgeon response after ${timeoutLabel} — Temporary AI Takeover`,
+      extraContextMessages: priorDoctorContext,
+    });
+
+    if (guidance.triageLevel === 'emergency') {
+      activateEmergencySession({
+        astronautId,
+        alertId: guidance.escalatedAlertId || `ALT-EMG-${Date.now()}`,
+        reason: 'Emergency detected during timeout review',
+        instructions: guidance.emergencyInstructions,
+      });
+    }
+
+    addChannelMessage(astronautId, 'ai', {
+      sender: 'ai_assistant',
+      senderId: 'astra-ai-medical',
+      senderName: 'ASTRA AI Medical Assistant',
+      senderRole: 'Temporary Medical Support System',
+      content: guidance.reply,
+      triageLevel: guidance.triageLevel,
+      protocolBasis: guidance.protocolBasis,
+      verifiedRecordsUsed: guidance.verifiedRecordsUsed,
+      vitalObservations: guidance.vitalObservations,
+      followUpQuestions: guidance.followUpQuestions,
+      firstAidSteps: guidance.firstAidSteps,
+      emergencyInstructions: guidance.emergencyInstructions,
+      escalationTriggered: guidance.escalationTriggered,
+      escalatedAlertId: guidance.escalatedAlertId,
+      disclaimer: guidance.disclaimer,
+      source: guidance.source,
+    });
+
+    // 3. Notify the Flight Surgeon & Medical Team
+    if (!timer.notifiedTimeoutTakeover) {
+      timer.notifiedTimeoutTakeover = true;
+      notifySurgeonOfAiTakeover(astronautId, timeoutSeconds, triggerText);
+    }
+
+    return true;
+  } finally {
+    timeoutExecutionLocks.delete(astronautId);
+  }
+}
+
+function scheduleServerWaitTimeout(astronautId: string, expiresAtIso: string) {
+  clearServerTimeoutHandle(astronautId);
+  const remainingMs = Math.max(0, Date.parse(expiresAtIso) - Date.now());
+  // Node timers max safe 32-bit int (~24.8 days); 2-3 hours (7.2e6 - 1.08e7 ms) fits cleanly
+  const handle = setTimeout(() => {
+    executeServerTimeoutTakeover(astronautId).catch((err) =>
+      console.warn('[Server Timeout Takeover Error]:', err?.message)
+    );
+  }, remainingMs + 50);
+  serverTimeoutHandles.set(astronautId, handle);
+}
+
+async function sweepExpiredDoctorTimeouts() {
+  const astronautIds = Object.keys(currentDoctorTimers);
+  for (const id of astronautIds) {
+    const t = currentDoctorTimers[id];
+    if (t?.isWaiting && t.expiresAt && Date.now() >= Date.parse(t.expiresAt)) {
+      await executeServerTimeoutTakeover(id);
+    }
+  }
+}
+
+// GET /api/medical-assistant/availability — Fetch server-authoritative availability & timeout config
+app.get('/api/medical-assistant/availability', (_req: Request, res: Response) => {
+  res.json({ success: true, data: getDoctorAvailabilityConfig() });
+});
+
+// POST /api/medical-assistant/availability — Update Flight Surgeon availability & 15s/2h/3h timeout on server
+app.post('/api/medical-assistant/availability', (req: Request, res: Response) => {
+  try {
+    const { doctorStatus, timeoutSeconds, timeoutHours, astronautId = 'ASTRO-74-SJ' } = req.body;
+
+    if (doctorStatus !== undefined && doctorStatus !== 'available' && doctorStatus !== 'unavailable') {
+      return res.status(400).json({ success: false, error: 'doctorStatus must be "available" or "unavailable"' });
+    }
+
+    let resolvedTimeoutSeconds = timeoutSeconds;
+    if (resolvedTimeoutSeconds === undefined && timeoutHours !== undefined) {
+      resolvedTimeoutSeconds = timeoutHours === 2 ? 7200 : timeoutHours === 3 ? 10800 : -1;
+    }
+
+    if (
+      resolvedTimeoutSeconds !== undefined &&
+      resolvedTimeoutSeconds !== 15 &&
+      resolvedTimeoutSeconds !== 7200 &&
+      resolvedTimeoutSeconds !== 10800
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: 'timeoutSeconds must be 15 (15 seconds), 7200 (2 hours), or 10800 (3 hours)',
+      });
+    }
+
+    const updatedConfig = setDoctorAvailabilityConfig({
+      doctorStatus,
+      timeoutSeconds: resolvedTimeoutSeconds,
+    });
+
+    if (doctorStatus === 'available' || doctorStatus === 'unavailable') {
+      for (const id of Array.from(serverTimeoutHandles.keys())) {
+        clearServerTimeoutHandle(id);
+      }
+    }
+
+    res.json({
+      success: true,
+      config: updatedConfig,
+      updatedContext: getMedicalAssistantContext(astronautId),
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to update availability config' });
+  }
+});
+
+// GET /api/medical-assistant/context/:astronautId — Auto-sync astronaut vitals, active channel & server timer
+app.get('/api/medical-assistant/context/:astronautId', async (req: Request, res: Response) => {
+  try {
+    const { astronautId } = req.params;
+    await executeServerTimeoutTakeover(astronautId);
+    const context = getMedicalAssistantContext(astronautId);
+    res.json({ success: true, data: context });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to load medical assistant context' });
+  }
+});
+
+// POST /api/medical-assistant/doctor-message — Direct message to Flight Surgeon (Doctor Chat ONLY + Emergency Override)
+app.post('/api/medical-assistant/doctor-message', async (req: Request, res: Response) => {
+  try {
+    const { astronautId = 'ASTRO-74-SJ', message } = req.body;
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ success: false, error: 'Message is required' });
+    }
+
+    await executeServerTimeoutTakeover(astronautId);
+    const activeChannel = getActiveChannelForAstronaut(astronautId);
+    if (activeChannel !== 'doctor') {
+      return res.status(409).json({
+        success: false,
+        error: 'Doctor Chat is currently inactive because the Flight Surgeon is unavailable or AI takeover is active. Route messages to AI Medical Assistant.',
+        activeChannel,
+      });
+    }
+
+    const preContext = getMedicalAssistantContext(astronautId);
+    const trimmed = message.trim();
+
+    // Record astronaut message strictly in Doctor Chat channel + Flight Surgeon Communications
+    const astronautMsg = addChannelMessage(astronautId, 'doctor', {
+      sender: 'astronaut',
+      senderId: preContext.astronaut.id,
+      senderName: `${preContext.astronaut.name} (${preContext.astronaut.callsign})`,
+      senderRole: preContext.astronaut.role,
+      content: trimmed,
+      vitalsSnapshot: {
+        heartRate: preContext.vitalsSnapshot.heartRate,
+        bloodPressure: preContext.vitalsSnapshot.bloodPressure,
+        spO2: preContext.vitalsSnapshot.spO2,
+        temperature: preContext.vitalsSnapshot.temperature,
+        respiratoryRate: preContext.vitalsSnapshot.respiratoryRate,
+        sleepHours: preContext.vitalsSnapshot.sleepHours,
+        timestamp: preContext.vitalsSnapshot.timestamp,
+      },
+    });
+
+    postAstronautDirectToSurgeon(astronautId, trimmed);
+
+    // EMERGENCY OVERRIDE — Highest priority, independent of Doctor Availability & 2h/3h timeout
+    const triage = detectEmergencyAndConcerningVitals(trimmed, preContext);
+    if (triage.triageLevel === 'emergency') {
+      clearServerTimeoutHandle(astronautId);
+
+      const guidance = await generateMedicalAssistantGuidance({
+        message: trimmed,
+        context: getMedicalAssistantContext(astronautId),
+        doctorStatus: preContext.doctorStatus,
+        triggerReason: 'IMMEDIATE EMERGENCY OVERRIDE (Zero-Wait Escalation)',
+      });
+
+      const emergencyReason =
+        [...triage.redFlags, ...triage.criticalVitals.map((v) => `${v.label}: ${v.value}${v.unit}`)].join(' / ') ||
+        'Critical Emergency Symptoms';
+
+      const emergencyState = activateEmergencySession({
+        astronautId,
+        alertId: guidance.escalatedAlertId || `ALT-EMG-${Date.now()}`,
+        reason: emergencyReason,
+        instructions: guidance.emergencyInstructions,
+      });
+
+      // Log emergency guidance in AI audit archive only (NEVER mix AI bubbles into Doctor Chat)
+      addChannelMessage(astronautId, 'ai', {
+        sender: 'ai_assistant',
+        senderId: 'astra-emergency-triage',
+        senderName: 'ASTRA Emergency Triage System',
+        content: guidance.reply,
+        triageLevel: 'emergency',
+        protocolBasis: guidance.protocolBasis,
+        verifiedRecordsUsed: guidance.verifiedRecordsUsed,
+        vitalObservations: guidance.vitalObservations,
+        followUpQuestions: guidance.followUpQuestions,
+        emergencyInstructions: guidance.emergencyInstructions,
+        escalationTriggered: true,
+        escalatedAlertId: emergencyState.alertId,
+        disclaimer: guidance.disclaimer,
+        source: guidance.source,
+      });
+
+      return res.json({
+        success: true,
+        immediateEmergency: true,
+        astronautMessage: astronautMsg,
+        emergencyState,
+        updatedContext: getMedicalAssistantContext(astronautId),
+      });
+    }
+
+    // Start or preserve server-authoritative 2h / 3h response timer
+    const timer = startOrPreserveDoctorWaitTimer(astronautId, astronautMsg.id, trimmed);
+    if (timer.expiresAt) {
+      scheduleServerWaitTimeout(astronautId, timer.expiresAt);
+    }
+
+    return res.json({
+      success: true,
+      immediateEmergency: false,
+      astronautMessage: astronautMsg,
+      updatedContext: getMedicalAssistantContext(astronautId),
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to send message to Flight Surgeon' });
+  }
+});
+
+// POST /api/medical-assistant/chat — AI Medical Assistant Channel ONLY (Doctor Unavailable or 2h/3h Timeout Takeover)
+app.post('/api/medical-assistant/chat', async (req: Request, res: Response) => {
+  try {
+    const { astronautId = 'ASTRO-74-SJ', message } = req.body;
+
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ success: false, error: 'Message is required' });
+    }
+
+    await executeServerTimeoutTakeover(astronautId);
+    const activeChannel = getActiveChannelForAstronaut(astronautId);
+
+    // Prevent AI interference while Doctor is Available & responding
+    if (activeChannel !== 'ai') {
+      return res.status(409).json({
+        success: false,
+        error: 'Flight Surgeon is currently Available. AI Medical Assistant is hidden and cannot interfere with live doctor communication.',
+        activeChannel,
+      });
+    }
+
+    const trimmed = message.trim();
+    const preContext = getMedicalAssistantContext(astronautId);
+
+    // Save astronaut message strictly in AI channel (never mixes with Doctor Chat)
+    const astronautMsg = addChannelMessage(astronautId, 'ai', {
+      sender: 'astronaut',
+      senderId: preContext.astronaut.id,
+      senderName: `${preContext.astronaut.name} (${preContext.astronaut.callsign})`,
+      senderRole: preContext.astronaut.role,
+      content: trimmed,
+      vitalsSnapshot: {
+        heartRate: preContext.vitalsSnapshot.heartRate,
+        bloodPressure: preContext.vitalsSnapshot.bloodPressure,
+        spO2: preContext.vitalsSnapshot.spO2,
+        temperature: preContext.vitalsSnapshot.temperature,
+        respiratoryRate: preContext.vitalsSnapshot.respiratoryRate,
+        sleepHours: preContext.vitalsSnapshot.sleepHours,
+        timestamp: preContext.vitalsSnapshot.timestamp,
+      },
+    });
+
+    const triage = detectEmergencyAndConcerningVitals(trimmed, preContext);
+    const guidance = await generateMedicalAssistantGuidance({
+      message: trimmed,
+      context: getMedicalAssistantContext(astronautId),
+      doctorStatus: preContext.doctorStatus,
+      triggerReason: preContext.timerState.aiTakeoverActive
+        ? `Flight Surgeon response timeout (${formatTimeoutDurationText(preContext.timeoutSeconds)})`
+        : 'Flight Surgeon Unavailable',
+    });
+
+    let emergencyState = null;
+    if (guidance.triageLevel === 'emergency') {
+      const emergencyReason =
+        [...triage.redFlags, ...triage.criticalVitals.map((v) => `${v.label}: ${v.value}${v.unit}`)].join(' / ') ||
+        'Critical Emergency Symptoms';
+
+      emergencyState = activateEmergencySession({
+        astronautId,
+        alertId: guidance.escalatedAlertId || `ALT-EMG-${Date.now()}`,
+        reason: emergencyReason,
+        instructions: guidance.emergencyInstructions,
+      });
+    }
+
+    const aiMsg = addChannelMessage(astronautId, 'ai', {
+      sender: 'ai_assistant',
+      senderId: guidance.triageLevel === 'emergency' ? 'astra-emergency-triage' : 'astra-ai-medical',
+      senderName:
+        guidance.triageLevel === 'emergency'
+          ? 'ASTRA Emergency Triage AI'
+          : 'ASTRA AI Medical Assistant',
+      senderRole: 'Temporary Medical Support System',
+      content: guidance.reply,
+      triageLevel: guidance.triageLevel,
+      protocolBasis: guidance.protocolBasis,
+      verifiedRecordsUsed: guidance.verifiedRecordsUsed,
+      vitalObservations: guidance.vitalObservations,
+      followUpQuestions: guidance.followUpQuestions,
+      firstAidSteps: guidance.firstAidSteps,
+      emergencyInstructions: guidance.emergencyInstructions,
+      escalationTriggered: guidance.escalationTriggered,
+      escalatedAlertId: guidance.escalatedAlertId,
+      disclaimer: guidance.disclaimer,
+      source: guidance.source,
+    });
+
+    res.json({
+      success: true,
+      astronautMessage: astronautMsg,
+      assistantMessage: aiMsg,
+      emergencyState,
+      updatedContext: getMedicalAssistantContext(astronautId),
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'AI Medical Assistant error' });
+  }
+});
+
+// POST /api/medical-assistant/surgeon-reply — Authorized Flight Surgeon Reply (Resets 2h/3h Timer & Restores Doctor Chat)
+app.post('/api/medical-assistant/surgeon-reply', (req: Request, res: Response) => {
+  try {
+    if (!isAuthorizedMedicalPersonnel(req)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized: Flight Surgeon credentials required to post physician responses.',
+      });
+    }
+
+    const { astronautId = 'ASTRO-74-SJ', content } = req.body;
+    const context = getMedicalAssistantContext(astronautId);
+
+    const replyText =
+      content && typeof content === 'string' && content.trim()
+        ? content.trim()
+        : `This is Dr. Marcus Vance (Flight Surgeon). I have reviewed your latest telemetry (HR ${context.vitalsSnapshot.heartRate} bpm, BP ${context.vitalsSnapshot.bloodPressure}, SpO2 ${context.vitalsSnapshot.spO2}%) and am responding directly in Doctor Chat.`;
+
+    clearServerTimeoutHandle(astronautId);
+    // Ensure Doctor status is available when surgeon responds directly
+    if (currentDoctorAvailability !== 'available') {
+      setDoctorAvailabilityConfig({ doctorStatus: 'available' });
+    }
+    const surgeonMsg = recordSurgeonReplyToDoctorChat(astronautId, replyText);
+
+    res.json({
+      success: true,
+      surgeonMessage: surgeonMsg,
+      updatedContext: getMedicalAssistantContext(astronautId),
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to record Flight Surgeon reply' });
+  }
+});
+
+// GET /api/medical-assistant/ai-review/:astronautId — Authorized Flight Surgeon Review of Saved AI Conversation History
+app.get('/api/medical-assistant/ai-review/:astronautId', (req: Request, res: Response) => {
+  try {
+    if (!isAuthorizedMedicalPersonnel(req)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized: Flight Surgeon authorization required to review AI medical transcripts.',
+      });
+    }
+    const { astronautId } = req.params;
+    const aiHistory = getAuthorizedAiHistory(astronautId);
+    res.json({ success: true, data: aiHistory });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch AI review history' });
+  }
+});
+
+// POST /api/medical-assistant/emergency/acknowledge/:astronautId — Authorized Medical Personnel Acknowledge Emergency
+app.post('/api/medical-assistant/emergency/acknowledge/:astronautId', (req: Request, res: Response) => {
+  try {
+    if (!isAuthorizedMedicalPersonnel(req)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized: Only authorized medical personnel may acknowledge an active emergency alert.',
+      });
+    }
+    const { astronautId } = req.params;
+    const { surgeonName = 'Dr. Marcus Vance, M.D.' } = req.body || {};
+    const acked = acknowledgeEmergencySession(astronautId, surgeonName);
+    res.json({
+      success: true,
+      acknowledgedSession: acked,
+      updatedContext: getMedicalAssistantContext(astronautId),
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to acknowledge emergency' });
+  }
+});
+
+// DELETE /api/medical-assistant/history/:astronautId — Clear separated channel history
+app.delete('/api/medical-assistant/history/:astronautId', (req: Request, res: Response) => {
+  try {
+    const { astronautId } = req.params;
+    const channelParam = req.query.channel as 'doctor' | 'ai' | 'all' | undefined;
+    if (channelParam === 'doctor' || channelParam === 'all' || !channelParam) {
+      clearServerTimeoutHandle(astronautId);
+    }
+    const history = clearChannelHistory(
+      astronautId,
+      channelParam === 'all' ? undefined : channelParam
+    );
+    res.json({ success: true, data: history, updatedContext: getMedicalAssistantContext(astronautId) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to clear history' });
+  }
+});
+
+
 // POST /api/ai/insight — Gemini AI Clinical Insight for Vitals
 app.post('/api/ai/insight', async (req: Request, res: Response) => {
   try {
@@ -764,7 +1899,7 @@ Highlight the correlation between elevated heart rate and the reduced ${sleep} h
 
         const response: any = await Promise.race([
           ai.models.generateContent({
-            model: 'gemini-3.8-flash',
+            model: 'gemini-4-hydrogen',
             contents: prompt,
           }),
           timeoutPromise,
@@ -775,12 +1910,12 @@ Highlight the correlation between elevated heart rate and the reduced ${sleep} h
           return res.json({
             success: true,
             insight: text,
-            source: 'gemini-3.8-flash',
+            source: 'gemini-4-hydrogen',
             timestamp: new Date().toISOString(),
           });
         }
-      } catch (geminiError: any) {
-        console.warn('[Gemini AI Insight] Falling back to aerospace clinical rule engine:', geminiError?.message);
+      } catch {
+        // Gracefully fall back to aerospace clinical rule engine
       }
     }
 
@@ -875,7 +2010,6 @@ const handleAstroChat = async (req: Request, res: Response) => {
           if (groqError?.status === 404 || groqError?.message?.includes('not exist')) {
             continue;
           }
-          console.warn(`[Groq Error with ${modelId}]:`, groqError?.message);
         }
       }
     }
@@ -912,8 +2046,8 @@ const handleAstroChat = async (req: Request, res: Response) => {
               });
             }
           }
-        } catch (orError: any) {
-          console.warn(`[OpenRouter ${orModel} Error]:`, orError?.message);
+        } catch {
+          // Try next fallback provider
         }
       }
     }
@@ -938,7 +2072,7 @@ const handleAstroChat = async (req: Request, res: Response) => {
 
         const response: any = await Promise.race([
           gemini.models.generateContent({
-            model: 'gemini-3.8-flash',
+            model: 'gemini-4-hydrogen',
             contents: geminiContents,
             config: { systemInstruction: systemPrompt },
           }),
@@ -949,11 +2083,11 @@ const handleAstroChat = async (req: Request, res: Response) => {
           return res.json({
             success: true,
             reply: text,
-            source: 'gemini-3.8-flash',
+            source: 'gemini-4-hydrogen',
           });
         }
-      } catch (geminiError: any) {
-        console.warn('[Gemini Fallback Error]:', geminiError?.message);
+      } catch {
+        // Fall back to local aerospace CBT engine
       }
     }
 
@@ -976,8 +2110,7 @@ const handleAstroChat = async (req: Request, res: Response) => {
       reply: localReply,
       source: 'astro-companion-resilience-core',
     });
-  } catch (error: any) {
-    console.error('[ASTRO Chat Server Error]:', error?.message);
+  } catch {
     res.status(500).json({
       success: false,
       error: 'ASTRO is currently unavailable. Please try again later.',
@@ -1029,6 +2162,59 @@ app.get('/api/fitness/exercises/:category', (req: Request, res: Response) => {
     res.json({ success: true, data: filtered, restricted: filteredRestricted });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error?.message || 'Failed to fetch exercises by category' });
+  }
+});
+
+// GET /api/fitness/sessions — Fetch completed workout sessions
+app.get('/api/fitness/sessions', (_req: Request, res: Response) => {
+  try {
+    const sessions = getWorkoutSessions();
+    res.json({ success: true, data: sessions });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch workout sessions' });
+  }
+});
+
+// POST /api/fitness/sessions — Complete & log an interactive workout session
+app.post('/api/fitness/sessions', (req: Request, res: Response) => {
+  try {
+    const {
+      exerciseId,
+      exerciseName,
+      category,
+      equipment,
+      durationMinutes,
+      actualDurationSeconds,
+      caloriesBurned,
+      avgHeartRate,
+      peakHeartRate,
+      notes,
+    } = req.body;
+
+    if (!exerciseId || !exerciseName) {
+      return res.status(400).json({ success: false, error: 'exerciseId and exerciseName are required' });
+    }
+
+    const created = logWorkoutSession({
+      exerciseId,
+      exerciseName,
+      category: category || 'Full Body',
+      equipment: equipment || 'ARED',
+      durationMinutes: Number(durationMinutes) || 15,
+      actualDurationSeconds: Number(actualDurationSeconds) || 900,
+      caloriesBurned: Number(caloriesBurned) || 100,
+      avgHeartRate: Number(avgHeartRate) || 118,
+      peakHeartRate: Number(peakHeartRate) || 134,
+      notes: notes || '',
+    });
+
+    res.status(201).json({
+      success: true,
+      data: created,
+      message: 'Workout session logged to Ground Telemetry & Unified Medical Timeline',
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to log workout session' });
   }
 });
 
@@ -1084,12 +2270,12 @@ Based on the astronaut's complete profile, vitals, symptoms, and conditions, gen
 }`;
 
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('AI request timeout')), 12000)
+          setTimeout(() => reject(new Error('AI request timeout')), 5000)
         );
 
         const response: any = await Promise.race([
           ai.models.generateContent({
-            model: 'gemini-2.0-flash',
+            model: 'gemini-4-hydrogen',
             contents: prompt,
           }),
           timeoutPromise,
@@ -1104,7 +2290,7 @@ Based on the astronaut's complete profile, vitals, symptoms, and conditions, gen
             return res.json({
               success: true,
               data: analysis,
-              source: 'gemini-2.0-flash',
+              source: 'gemini-4-hydrogen',
             });
           } catch {
             // If JSON parsing fails, return as raw assessment
@@ -1118,12 +2304,12 @@ Based on the astronaut's complete profile, vitals, symptoms, and conditions, gen
                 cautions: ['AI response was non-structured. Review overall assessment manually.'],
                 timestamp: new Date().toISOString(),
               } as FitnessAIAnalysis,
-              source: 'gemini-2.0-flash-raw',
+              source: 'gemini-4-hydrogen-raw',
             });
           }
         }
-      } catch (geminiError: any) {
-        console.warn('[Gemini Fitness AI] Falling back to rule engine:', geminiError?.message);
+      } catch {
+        // Gracefully fall back to local aerospace fitness rule engine
       }
     }
 
@@ -1146,7 +2332,7 @@ Based on the astronaut's complete profile, vitals, symptoms, and conditions, gen
     }
 
     const dailyPlanParts: string[] = [];
-    dailyPlanParts.push('1. Warm-up: 5 min light CEVIS cycling at low resistance');
+    dailyPlanParts.push('1. Warm-up: 5 min light Resistive Band mobility & joint activation');
     const picked = recommended.slice(0, 5);
     picked.forEach((ex, i) => {
       dailyPlanParts.push(`${i + 2}. ${ex.name} — ${ex.durationMinutes} min (${ex.intensity} intensity)`);
@@ -1200,12 +2386,12 @@ Her clinical status:
 - Blood Pressure: ${vitals.bloodPressureSys}/${vitals.bloodPressureDia} mmHg, SpO2: ${vitals.spO2}%, Sleep: ${vitals.sleepHours} hrs
 - Active Symptoms: ${symptoms.filter(s => s.status !== 'resolved').map(s => `${s.bodyPart} (${s.painType}, intensity ${s.intensity}/10)`).join(', ') || 'None'}
 - Currently Restricted Exercises due to safety: ${restricted.map(r => `${r.exerciseId} (${r.reason})`).join('; ')}
-- Safe Available Countermeasures: CEVIS cycling, Bench Press, Heel Raises, Core stabilization, Resistive Band circuit.
+- Safe Available Countermeasures: ARED Heel Raise, Microgravity Core Stabilization, Resistive Band Full-Body Circuit.
 
 Instructions:
 1. Provide concise, expert NASA aerospace exercise guidance (2 to 4 sentences).
 2. Explicitly explain why heavy axial spine compressive loads (like ARED squats/deadlifts or heavy treadmill running) are locked/dangerous if asked, noting her +${profile.spineElongation} cm disc expansion and lumbar ache.
-3. Recommend safe alternatives (e.g. CEVIS ergometer, gentle resistance bands, decompression stretches).
+3. Recommend safe alternatives from the active catalog (ARED Heel Raise, Microgravity Core Stabilization, Resistive Band Full-Body Circuit).
 4. Keep tone professional, encouraging, and authoritative in spaceflight human physiology.`;
 
     const ai = getGeminiClient();
@@ -1231,12 +2417,12 @@ Instructions:
         });
 
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('AI request timeout')), 8000)
+          setTimeout(() => reject(new Error('AI request timeout')), 5000)
         );
 
         const response: any = await Promise.race([
           ai.models.generateContent({
-            model: 'gemini-2.0-flash',
+            model: 'gemini-4-hydrogen',
             contents,
             config: { systemInstruction: systemPrompt },
           }),
@@ -1248,26 +2434,26 @@ Instructions:
           return res.json({
             success: true,
             reply: text,
-            source: 'gemini-2.0-flash',
+            source: 'gemini-4-hydrogen',
           });
         }
-      } catch (geminiError: any) {
-        console.warn('[Fitness Chat Gemini Error]:', geminiError?.message);
+      } catch {
+        // Gracefully fall back to local aerospace exercise medicine engine
       }
     }
 
     // Local Aerospace Exercise Medicine Rule Engine Fallback
     const lower = message.toLowerCase();
-    let reply = `Astronaut ${profile.callsign}, with your current +${profile.spineElongation} cm spinal elongation and lumbar sensitivity, we must strictly preserve disc hydration and avoid heavy axial loading. Focus today on the CEVIS ergometer at 75% VO2 max and light resistance bands.`;
+    let reply = `Astronaut ${profile.callsign}, with your current +${profile.spineElongation} cm spinal elongation and lumbar sensitivity, we must strictly preserve disc hydration and avoid heavy axial loading. Focus today on Microgravity Core Stabilization, ARED Heel Raises, and the Resistive Band Full-Body Circuit.`;
 
     if (lower.includes('squat') || lower.includes('deadlift') || lower.includes('why locked') || lower.includes('restricted') || lower.includes('spine') || lower.includes('back')) {
-      reply = `ARED heavy squats and deadlifts are locked because axial compressive loads pose immediate disc herniation risk under your current +${profile.spineElongation} cm microgravity spinal elongation and active L3-L5 discomfort. Stick to unweighted core stabilization and CEVIS cycling today.`;
+      reply = `ARED heavy squats and deadlifts are locked because axial compressive loads pose immediate disc herniation risk under your current +${profile.spineElongation} cm microgravity spinal elongation and active L3-L5 discomfort. Stick to Microgravity Core Stabilization and Resistive Band circuits today.`;
     } else if (lower.includes('cardio') || lower.includes('run') || lower.includes('treadmill') || lower.includes('t2')) {
-      reply = `T2 Treadmill bungee harness loading creates repetitive shockwaves along the decompressed spinal column. CEVIS cycle ergometer is cleared and recommended today for 30 minutes to maintain cardiovascular endurance without vertebral impact.`;
+      reply = `T2 Treadmill bungee harness loading creates repetitive shockwaves along the decompressed spinal column. The Resistive Band Full-Body Circuit is cleared and recommended today for 25 minutes to maintain muscular and metabolic conditioning without vertebral impact.`;
     } else if (lower.includes('tired') || lower.includes('fatigue') || lower.includes('sleep') || lower.includes('heart')) {
-      reply = `Given your ${vitals.sleepHours}h of fragmented sleep and elevated resting heart rate (${vitals.heartRate} bpm vs ${profile.restingHeartRate} baseline), reduce workout intensity by 30%. Limit to 20 minutes on CEVIS followed by hamstring decompression stretching.`;
+      reply = `Given your ${vitals.sleepHours}h of fragmented sleep and elevated resting heart rate (${vitals.heartRate} bpm vs ${profile.restingHeartRate} baseline), reduce workout intensity by 30%. Prioritize ARED Heel Raises and low-intensity Microgravity Core Stabilization today.`;
     } else if (lower.includes('recommend') || lower.includes('what should i do') || lower.includes('routine') || lower.includes('today')) {
-      reply = `Today's cleared flight plan: 1) 5 min CEVIS warm-up, 2) ARED Bench Press (3 sets x 10 reps), 3) ARED Heel Raises, 4) 20 min CEVIS aerobic cycle, 5) 10 min microgravity decompression stretches. All spinal loading exercises remain locked.`;
+      reply = `Today's cleared flight plan: 1) ARED Heel Raise (10 min, Low intensity), 2) Microgravity Core Stabilization (15 min, Moderate intensity), 3) Resistive Band Full-Body Circuit (25 min, Moderate intensity). All heavy spinal loading exercises remain locked.`;
     }
 
     return res.json({
@@ -1280,182 +2466,31 @@ Instructions:
   }
 });
 
-// ─── NutriLog & Bio-Kitchen API Endpoints ─────────────────────────────────────
-
-app.get('/api/nutrition/inventory', (_req: Request, res: Response) => {
-  try {
-    const inventory = getNutritionInventory();
-    res.json({ success: true, data: inventory });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch inventory' });
-  }
-});
-
-app.get('/api/nutrition/daily-log', (_req: Request, res: Response) => {
-  try {
-    const log = getDailyNutritionLog();
-    res.json({ success: true, data: log });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch daily nutrition log' });
-  }
-});
-
-app.get('/api/nutrition/alerts', (_req: Request, res: Response) => {
-  try {
-    const alerts = getInventoryAlerts();
-    res.json({ success: true, data: alerts });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch inventory alerts' });
-  }
-});
-
-app.post('/api/nutrition/take', (req: Request, res: Response) => {
-  try {
-    const { itemId, qty = 1 } = req.body;
-    if (!itemId) {
-      return res.status(400).json({ success: false, error: 'itemId is required' });
-    }
-
-    const result = takeNutrientItem(itemId, Number(qty));
-    if (!result) {
-      return res.status(404).json({ success: false, error: 'Item not found or insufficient stock' });
-    }
-
-    addTimelineEvent({
-      type: 'vitals',
-      title: `Nutrition Intake: ${result.item.name}`,
-      summary: `Administered ${qty}x ${result.item.unit} (${result.item.category}). Calories: +${(result.item.calories || 0) * qty} kcal. Key nutrients: ${result.item.keyNutrients.join(', ')}`,
-      severity: 'nominal',
-      badge: 'NUTRILOG',
-      details: {
-        itemId: result.item.id,
-        category: result.item.category,
-        remainingStock: result.item.currentStock,
-      },
-    });
-
-    res.json({
-      success: true,
-      item: result.item,
-      log: result.log,
-      message: `${result.item.name} recorded and inventory synchronized.`,
-    });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error?.message || 'Failed to log nutrient consumption' });
-  }
-});
-
-app.post('/api/nutrition/hydration', (req: Request, res: Response) => {
-  try {
-    const { amountMl } = req.body;
-    if (!amountMl || typeof amountMl !== 'number') {
-      return res.status(400).json({ success: false, error: 'Valid amountMl number is required' });
-    }
-
-    const log = logHydration(amountMl);
-
-    if (log.hydrationLiters >= 2.0 && log.hydrationLiters - (amountMl / 1000) < 2.0) {
-      addTimelineEvent({
-        type: 'vitals',
-        title: 'Daily Hydration Milestone Reached',
-        summary: `Current intake: ${log.hydrationLiters} L / 2.5 L goal. Counteracting cephalic fluid shift and renal calculus risk.`,
-        severity: 'nominal',
-        badge: 'HYDRATION',
-      });
-    }
-
-    res.json({ success: true, log, message: `+${amountMl} mL hydration logged.` });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error?.message || 'Failed to log hydration' });
-  }
-});
-
-app.post('/api/nutrition/ai-plan', async (req: Request, res: Response) => {
-  try {
-    const { profile } = req.body;
-    const radDose = profile?.radiationDoseMsv ?? 14.8;
-    const spineDelta = profile?.spineElongation ?? 4.2;
-    const hr = profile?.restingHeartRate ?? 58;
-    const missionDay = profile?.missionElapsedDays ?? 84;
-
-    const ai = getGeminiClient();
-    if (ai) {
-      try {
-        const prompt = `You are the NASA Flight Surgeon & Space Nutrition Lead aboard the Artemis / ISS Expedition.
-Generate a concise, 4 to 5 bullet point Daily Space Nutrition & Countermeasure Protocol for Astronaut Dr. Salma Johnson (MET Day ${missionDay}):
-- Cumulative Ionizing Radiation Dose: ${radDose} mSv
-- Microgravity Spine Elongation: +${spineDelta} cm
-- Resting Baseline HR: ${hr} bpm
-
-Requirements:
-- Specify exact NASA dietary countermeasures (e.g. Lycopene/Vitamin E for radiation DNA protection, Calcium/D3 & Collagen for microgravity bone demineralization, Electrolytes for fluid shift).
-- Tone: Professional aerospace clinical protocol. Bullet points starting with emojis.`;
-
-        const response: any = await Promise.race([
-          ai.models.generateContent({
-            model: 'gemini-3.8-flash',
-            contents: prompt,
-          }),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('AI request timeout')), 5000)),
-        ]);
-
-        const text = response.text?.trim();
-        if (text) {
-          return res.json({ success: true, plan: text, source: 'gemini-3.8-flash' });
-        }
-      } catch (geminiError: any) {
-        console.warn('[Gemini Nutri Plan fallback]:', geminiError?.message);
-      }
-    }
-
-    const fallbackLines = [
-      `🍅 Radiation Protocol: Cumulative dose at ${radDose} mSv. Prioritize 1x Lycopene Pouch + 2x Vitamin E & C Shield Tablets to quench ionizing free radicals.`,
-      `🦴 Musculoskeletal Countermeasure: +${spineDelta} cm spinal elongation detected. Take Calcium-D3 Yogurt Pouch + Collagen Pack post-ARED resistance workout.`,
-      `💧 Electrolyte & Fluid Balance: Drink minimum 2.5 L treated water with 1x Electrolyte Sachet to prevent orthostatic intolerance.`,
-      `😴 Circadian & Recovery: Take Magnesium Glycinate + Chamomile Infusion 45 minutes before sleep pod light dimming.`,
-      `🧠 Neuro-Cognitive Defense: 2x Omega-3 DHA/EPA softgels with lunch to preserve neuronal membranes against cosmic ray micro-trauma.`,
-    ];
-
-    res.json({
-      success: true,
-      plan: fallbackLines.join('\n'),
-      source: 'aerospace-clinical-matrix',
-    });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error?.message || 'Failed to generate meal plan' });
-  }
-});
-
 
 // Mount Vite or static server
 async function startServer() {
-  const fs = await import('fs');
-  const path = await import('path');
-
-  // 1. Serve public static assets (images, icons, 3D models)
-  app.use(express.static(path.resolve(process.cwd(), 'public')));
-
-  // 2. Check for built production bundle in dist/
-  const distPath = path.resolve(process.cwd(), 'dist');
-  const hasDist = fs.existsSync(path.resolve(distPath, 'index.html'));
-
-  if (isProd || hasDist) {
-    app.use(express.static(distPath));
-    app.get('*', (req: Request, res: Response, next) => {
-      if (req.originalUrl.startsWith('/api')) return next();
-      res.sendFile(path.resolve(distPath, 'index.html'));
-    });
-  } else {
-    // 3. Vite development SPA middleware
+  if (!isProd) {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+        watch: null,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
+  } else {
+    app.use(express.static('dist'));
+    app.get('*', (_req: Request, res: Response) => {
+      res.sendFile('dist/index.html', { root: '.' });
+    });
   }
 
-  app.listen(PORT, 'localhost', () => {
-    console.log(`[ASTROCARE] Server running on http://localhost:${PORT}`);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[ASTROCARE] Server running on http://0.0.0.0:${PORT}`);
+    setInterval(() => {
+      sweepExpiredDoctorTimeouts().catch(() => {});
+    }, 15000);
   });
 }
 
