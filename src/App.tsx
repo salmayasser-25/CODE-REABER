@@ -38,6 +38,8 @@ import {
   X, 
   Save 
 } from 'lucide-react';
+import { AuthPage, AuthUser } from './components/AuthPage.tsx';
+import { AstronautApp } from './components/AstronautApp.tsx';
 
 const DEFAULT_INITIAL_PROFILE: AstronautProfile = {
   id: 'ASTRO-74-SJ',
@@ -74,6 +76,10 @@ const DEFAULT_INITIAL_PROFILE: AstronautProfile = {
 };
 
 export default function App() {
+  // ── Auth Gate ────────────────────────────────────────────
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const handleLogout = () => setAuthUser(null);
+
   const [profile, setProfile] = useState<AstronautProfile>(DEFAULT_INITIAL_PROFILE);
   const [currentTab, setCurrentTab] = useState<string>('overview');
   const [selectedAstronautId, setSelectedAstronautId] = useState<string>('ASTRO-74-SJ');
@@ -492,6 +498,14 @@ export default function App() {
   const activeRestrictionsCount = restrictions.filter((r) => r.status === 'Active').length;
   const unreadCommsCount = conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
 
+  // ── Auth Gate ────────────────────────────────────────────
+  if (!authUser) {
+    return <AuthPage onLogin={setAuthUser} />;
+  }
+  if (authUser.role === 'astronaut') {
+    return <AstronautApp user={authUser} onLogout={handleLogout} />;
+  }
+
   return (
     <div
       className="min-h-screen text-slate-100 relative selection:bg-[#00E5FF]/30 selection:text-[#00E5FF]"
@@ -521,6 +535,7 @@ export default function App() {
           onSelectTab={setCurrentTab}
           profile={profile}
           unreadCount={unreadCommsCount}
+          onLogout={handleLogout}
         />
 
         {/* Content Layout: Left Sidebar + Main Content */}

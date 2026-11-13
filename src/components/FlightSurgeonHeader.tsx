@@ -21,6 +21,7 @@ interface FlightSurgeonHeaderProps {
   profile: AstronautProfile;
   unreadCount?: number;
   onOpenNotifications?: () => void;
+  onLogout?: () => void;
 }
 
 export const FlightSurgeonHeader: React.FC<FlightSurgeonHeaderProps> = ({
@@ -28,6 +29,7 @@ export const FlightSurgeonHeader: React.FC<FlightSurgeonHeaderProps> = ({
   onSelectTab,
   profile,
   unreadCount = 2,
+  onLogout,
 }) => {
   const [missionTime, setMissionTime] = useState<string>('MET T+84:14:22:18');
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
@@ -319,6 +321,15 @@ export const FlightSurgeonHeader: React.FC<FlightSurgeonHeaderProps> = ({
                   >
                     GENERATE FLIGHT REPORT
                   </button>
+                  {onLogout && (
+                    <button
+                      type="button"
+                      onClick={() => { onLogout(); setShowProfileMenu(false); }}
+                      className="w-full py-2 px-3 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 font-bold text-center block transition-all flex items-center justify-center gap-2"
+                    >
+                      SIGN OUT / SWITCH ROLE
+                    </button>
+                  )}
                 </div>
               </div>
             )}
