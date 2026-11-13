@@ -1,7 +1,4 @@
-import React, { useState, useEffect, useRef, Suspense } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, useGLTF } from '@react-three/drei';
-import * as THREE from 'three';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Sparkles, 
   Send, 
@@ -20,148 +17,31 @@ import {
 } from 'lucide-react';
 import { ChatMessage, AstronautProfile } from '../types/astronaut.ts';
 
-const AVATAR_MODEL_URL = '/models/corpus_mira_space_marine_bust.glb';
 
-// Pre-load the avatar model from local static storage
-try {
-  useGLTF.preload(AVATAR_MODEL_URL);
-} catch {
-  // Preload safety catch
-}
 
-// React Error Boundary to catch any WebGL or model loading faults
-class ModelErrorBoundary extends React.Component<
-  { fallback: React.ReactNode; children: React.ReactNode },
-  { hasError: boolean }
-> {
-  constructor(props: any) {
-    super(props);
-    this.state = { hasError: false };
-  }
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  componentDidCatch(err: any) {
-    console.warn('Avatar model failed to render, switching to fallback:', err?.message);
-  }
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback;
-    }
-    return this.props.children;
-  }
-}
-
-// 3D Avatar component that renders the GLB bust and animates idle breathing
-function AvatarModel() {
-  const gltf = useGLTF(AVATAR_MODEL_URL);
-  const meshRef = useRef<THREE.Group | null>(null);
-
-  // Idle gentle breathing & floating animation
-  useFrame((state) => {
-    if (meshRef.current) {
-      const time = state.clock.getElapsedTime();
-      // Gentle vertical breathing wave
-      meshRef.current.position.y = -1.6 + Math.sin(time * 1.5) * 0.04;
-      // Slight slow yaw turn
-      meshRef.current.rotation.y = Math.sin(time * 0.5) * 0.08;
-    }
-  });
-
-  return (
-    <group ref={meshRef} position={[0, -1.6, 0]} scale={1.8}>
-      <primitive object={gltf.scene} />
-    </group>
-  );
-}
-
-// Fallback procedural avatar if 3D model is still loading or network is slow
-function AvatarFallback() {
-  const meshRef = useRef<THREE.Mesh | null>(null);
-
-  useFrame((state) => {
-    if (meshRef.current) {
-      const t = state.clock.getElapsedTime();
-      meshRef.current.rotation.y = t * 0.4;
-      meshRef.current.position.y = Math.sin(t * 1.8) * 0.08;
-    }
-  });
-
-  return (
-    <group position={[0, 0, 0]}>
-      {/* Head */}
-      <mesh ref={meshRef}>
-        <sphereGeometry args={[0.9, 32, 32]} />
-        <meshStandardMaterial
-          color="#a855f7"
-          roughness={0.2}
-          metalness={0.8}
-          emissive="#7c3aed"
-          emissiveIntensity={0.25}
-        />
-      </mesh>
-      {/* Visor */}
-      <mesh position={[0, 0.1, 0.75]}>
-        <boxGeometry args={[0.9, 0.35, 0.3]} />
-        <meshStandardMaterial
-          color="#00e5ff"
-          roughness={0.1}
-          metalness={0.9}
-          emissive="#00e5ff"
-          emissiveIntensity={0.5}
-        />
-      </mesh>
-      {/* Base collar */}
-      <mesh position={[0, -1.1, 0]}>
-        <cylinderGeometry args={[0.95, 1.2, 0.6, 32]} />
-        <meshStandardMaterial color="#1e1b4b" roughness={0.4} metalness={0.6} />
-      </mesh>
-    </group>
-  );
-}
-
-// 3D Avatar Scene Canvas
+// 3D Sketchfab Astronaut Avatar Embed
 function AvatarViewer() {
   return (
     <div className="relative w-full h-80 sm:h-96 rounded-2xl overflow-hidden bg-gradient-to-b from-[#140b2e]/80 to-[#070514]/90 border border-purple-500/40 shadow-[0_0_35px_rgba(168,85,247,0.25)]">
-      {/* Floating 3D HUD Reticles */}
+      {/* Floating 3D HUD Reticle */}
       <div className="absolute top-3 left-3 z-10 flex items-center gap-2 px-3 py-1 rounded-lg bg-purple-950/80 border border-purple-500/40 text-purple-300 font-mono text-xs font-bold shadow-[0_0_12px_rgba(168,85,247,0.3)]">
         <Sparkles className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
         <span>ASTRO AVATAR // IDLE SYNTHESIS</span>
       </div>
 
       <div className="absolute bottom-3 right-3 z-10 text-[11px] font-mono text-purple-300/80 bg-purple-950/70 px-2.5 py-1 rounded border border-purple-800">
-        DRAG TO ROTATE · SCROLL TO ZOOM
+        DRAG TO ROTATE &middot; SCROLL TO ZOOM
       </div>
 
-      <Canvas camera={{ position: [0, 0, 3.8], fov: 42 }}>
-        <ambientLight intensity={1.2} />
-        {/* Soft violet key light */}
-        <directionalLight position={[4, 5, 4]} intensity={2.0} color="#e9d5ff" />
-        {/* Cool cyan rim light */}
-        <directionalLight position={[-4, 2, -3]} intensity={1.8} color="#00e5ff" />
-        {/* Warm bottom fill */}
-        <pointLight position={[0, -2, 2]} intensity={1.5} color="#c084fc" />
-
-        <Suspense fallback={<AvatarFallback />}>
-          <ModelErrorBoundary fallback={<AvatarFallback />}>
-            <AvatarModel />
-          </ModelErrorBoundary>
-        </Suspense>
-
-        <OrbitControls 
-          enableZoom={true} 
-          enablePan={false} 
-          minDistance={2.5} 
-          maxDistance={5.5}
-          maxPolarAngle={Math.PI / 1.7}
-          minPolarAngle={Math.PI / 3}
-        />
-      </Canvas>
+      <iframe
+        title="Astronaut head woman"
+        className="w-full h-full border-0"
+        allow="autoplay; fullscreen; xr-spatial-tracking"
+        src="https://sketchfab.com/models/6738004b11b54a57b74765950375d0f2/embed?preload=1&transparent=1&ui_theme=dark"
+      />
     </div>
   );
 }
-
 // 4-4-4-4 Box Breathing Widget
 function BreathingExerciseWidget() {
   const [phase, setPhase] = useState<'Inhale' | 'Hold (Full)' | 'Exhale' | 'Hold (Empty)'>('Inhale');

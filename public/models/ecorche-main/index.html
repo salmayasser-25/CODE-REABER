@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Écorché · open 3D anatomy figure</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23577259'/%3E%3Cpath d='M32 12v40M20 22c8 4 16 4 24 0M20 34c8 4 16 4 24 0' stroke='%23faf8f4' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<meta name="description" content="A full human figure, skeleton and muscles, one named mesh per structure. Built from BodyParts3D and Z-Anatomy, free under CC BY-SA 4.0.">
+<style>
+:root {
+  --bg: #efece6; --panel: #f8f6f2; --ink: #1d1b19; --ink-2: #5d5750; --line: rgba(29, 27, 25, .14); --accent: #577259; --on-accent: #faf8f4;
+  --sans: "Inter Tight", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1b1d21; --panel: #24282d; --ink: #ece8e2; --ink-2: #a8a29a; --line: rgba(236, 232, 226, .14); --accent: #93ae92; --on-accent: #1b1d21; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--sans); -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+.top { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 20px; pointer-events: none; }
+.top > * { pointer-events: auto; }
+.brand h1 { margin: 0; font-size: 1.25rem; font-weight: 600; letter-spacing: -.01em; }
+.brand p { margin: 2px 0 0; color: var(--ink-2); font-size: .85rem; max-width: 42ch; }
+.links { display: flex; gap: 14px; font-size: .85rem; }
+.links a { color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.links a:hover { color: var(--ink); text-decoration-color: currentColor; }
+
+.search { position: fixed; top: 108px; left: 20px; width: min(300px, calc(100vw - 40px)); }
+.search input { width: 100%; height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.search input::placeholder { color: var(--ink-2); }
+.results { list-style: none; margin: 6px 0 0; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); max-height: 50vh; overflow: auto; }
+.results:empty { display: none; }
+.results button { width: 100%; text-align: left; padding: 7px 10px; border-radius: 6px; font-size: .9rem; }
+.results button:hover, .results button:focus-visible { background: var(--bg); outline: none; }
+.results small { color: var(--ink-2); }
+
+.info { position: fixed; right: 20px; top: 108px; width: min(300px, calc(100vw - 40px)); padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); opacity: 0; transform: translateY(6px); transition: opacity .4s, transform .4s; pointer-events: none; }
+.info.on { opacity: 1; transform: none; pointer-events: auto; }
+.info h2 { margin: 0 24px 8px 0; font-size: 1.05rem; font-weight: 600; line-height: 1.25; }
+.info dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: .85rem; }
+.info dt { color: var(--ink-2); }
+.info dd { margin: 0; }
+.info .x { position: absolute; top: 10px; right: 10px; width: 28px; height: 28px; border-radius: 50%; color: var(--ink-2); }
+.info .x:hover { background: var(--bg); color: var(--ink); }
+
+.dock { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); max-width: calc(100vw - 24px); }
+.seg { display: flex; gap: 2px; }
+.seg button { height: 34px; padding: 0 14px; border-radius: 999px; color: var(--ink-2); font-size: .88rem; transition: background-color .3s, color .3s; }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.xray { display: flex; align-items: center; gap: 8px; padding-right: 6px; font-size: .85rem; color: var(--ink-2); }
+.xray input { width: 110px; accent-color: var(--accent); }
+
+.foot { position: fixed; left: 20px; bottom: calc(18px + env(safe-area-inset-bottom)); max-width: 30ch; font-size: .75rem; color: var(--ink-2); }
+.foot a { color: inherit; }
+
+.loading { position: fixed; inset: 0; display: grid; place-items: center; transition: opacity .6s; pointer-events: none; }
+.loading.done { opacity: 0; }
+.bar { width: 160px; height: 2px; background: var(--line); overflow: hidden; border-radius: 2px; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.loading p { margin: 10px 0 0; font-size: .8rem; color: var(--ink-2); text-align: center; }
+
+@media (max-width: 760px) {
+  .brand p, .foot { display: none; }
+  .links { flex-direction: column; align-items: flex-end; gap: 4px; }
+  .search { top: 64px; left: 12px; width: calc(100vw - 24px); }
+  .info { top: auto; right: 12px; left: 12px; width: auto; bottom: calc(120px + env(safe-area-inset-bottom)); }
+  .dock { border-radius: 18px; }
+}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>Écorché</h1>
+    <p>Skeleton and muscles of an adult male, one named mesh per structure. Free to use under CC BY-SA 4.0.</p>
+  </div>
+  <nav class="links" aria-label="Project">
+    <a href="https://github.com/Charleeh/ecorche">Source on GitHub</a>
+    <a href="model/ecorche.glb" download>Download .glb</a>
+  </nav>
+</header>
+
+<div class="search">
+  <label for="q" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Find a structure</label>
+  <input id="q" type="search" placeholder="Find a muscle or bone" autocomplete="off" spellcheck="false" disabled>
+  <ul class="results" id="results"></ul>
+</div>
+
+<section class="info" id="info" aria-live="polite">
+  <button class="x" type="button" id="close" aria-label="Clear selection">✕</button>
+  <h2 id="iName"></h2>
+  <dl id="iMeta"></dl>
+</section>
+
+<div class="dock">
+  <div class="seg" role="group" aria-label="Show">
+    <button type="button" data-layer="both" aria-pressed="true">Both</button>
+    <button type="button" data-layer="muscles" aria-pressed="false">Muscles</button>
+    <button type="button" data-layer="bones" aria-pressed="false">Skeleton</button>
+  </div>
+  <label class="xray">Outer muscles <input type="range" id="xray" min="0.08" max="1" step="0.01" value="1"></label>
+</div>
+
+<p class="foot">Data: <a href="https://dbarchive.biosciencedbc.jp/en/bodyparts3d/">BodyParts3D</a> © The Database Center for Life Science (CC BY 4.0) and <a href="https://www.z-anatomy.com/">Z-Anatomy</a> by Gauthier Kervyn (CC BY-SA 4.0).</p>
+
+<div class="loading" id="loading"><div><div class="bar"><i id="bar"></i></div><p id="lmsg">Loading the figure, 6 MB</p></div></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const $ = (s) => document.querySelector(s);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.AgXToneMapping;
+renderer.toneMappingExposure = 1.05;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const dark = matchMedia('(prefers-color-scheme: dark)');
+const setBg = () => { scene.background = new THREE.Color(dark.matches ? 0x1b1d21 : 0xefece6); render(); };
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.8;
+const key = new THREE.DirectionalLight(0xfff4e8, 1.6); key.position.set(2, 3, 2.5); scene.add(key);
+const rim = new THREE.DirectionalLight(0xe8f0ff, 0.9); rim.position.set(-2.5, 2, -2.5); scene.add(rim);
+
+// soft contact shadow under the feet
+const sh = document.createElement('canvas'); sh.width = sh.height = 128;
+const g = sh.getContext('2d'), grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+grad.addColorStop(0, 'rgba(0,0,0,.32)'); grad.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+const shadow = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.6), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sh), transparent: true, depthWrite: false }));
+shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.001; scene.add(shadow);
+
+const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.05, 50);
+const home = { pos: new THREE.Vector3(1.4, 1.2, 4.1), target: new THREE.Vector3(0, 0.9, 0) };
+camera.position.copy(home.pos);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(home.target); controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 0.25; controls.maxDistance = 8; controls.maxPolarAngle = Math.PI * 0.92;
+
+let needs = true, fly = null;
+function render() { needs = true; }
+controls.addEventListener('change', render);
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); render(); });
+dark.addEventListener('change', setBg); setBg();
+renderer.setAnimationLoop(() => {
+  if (fly) {
+    const t = Math.min(1, (performance.now() - fly.t0) / 900), e = 1 - Math.pow(1 - t, 3);
+    camera.position.lerpVectors(fly.p0, fly.p1, e); controls.target.lerpVectors(fly.c0, fly.c1, e);
+    if (t >= 1) fly = null; needs = true;
+  }
+  if (controls.update()) needs = true;
+  if (needs) { needs = false; renderer.render(scene, camera); }
+});
+
+// ---------- the figure ----------
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+const meshes = [], layers = { skeleton: [], deep: [], superficial: [] };
+let mats = null, hovered = null, selected = null;
+
+loader.load('model/ecorche.meshopt.glb', (gltf) => {
+  scene.add(gltf.scene);
+  const base = {};
+  gltf.scene.traverse((o) => {
+    if (!o.isMesh) return;
+    const x = o.userData; o.userData.base = o.material.name;
+    base[o.material.name] = o.material;
+    meshes.push(o);
+    (x.layer === 'skeleton' ? layers.skeleton : x.layer === 'deep muscles' ? layers.deep : layers.superficial).push(o);
+  });
+  // superficial muscles get their own material so the x-ray slider leaves the deep ones opaque
+  const outer = base.Muscle.clone(); outer.name = 'Outer muscle';
+  layers.superficial.forEach((m) => { m.material = outer; m.userData.base = 'Outer muscle'; });
+  const tint = (m, c, k) => { const h = m.clone(); h.emissive = new THREE.Color(c); h.emissiveIntensity = k; return h; };
+  // the selection drops the tissue colours for a flat sage tint, so it reads at a glance and keeps its shading
+  const pickMat = (m) => { const h = m.clone(); h.vertexColors = false; h.color = new THREE.Color(0x9fc29a); h.emissive = new THREE.Color(0x2c4a31); h.emissiveIntensity = 0.3; return h; };
+  const plain = { Bone: base.Bone, Muscle: base.Muscle, 'Outer muscle': outer };
+  mats = { ...plain,
+    hover: Object.fromEntries(Object.entries(plain).map(([n, m]) => [n, tint(m, 0x577259, 0.22)])),
+    pick: Object.fromEntries(Object.entries(plain).map(([n, m]) => [n, pickMat(m)])) };
+  buildSearch();
+  $('#q').disabled = false;
+  $('#loading').classList.add('done');
+  render();
+}, (e) => { if (e.total) $('#bar').style.width = (e.loaded / e.total * 100).toFixed(1) + '%'; },
+(err) => { $('#lmsg').textContent = 'The model could not be loaded. ' + (err && err.message ? err.message : ''); });
+
+function paint(m) {
+  if (!m) return;
+  const b = m.userData.base;
+  m.material = m === selected ? mats.pick[b] : m === hovered ? mats.hover[b] : mats[b];
+  if (b === 'Outer muscle') syncXray(m.material);
+}
+function syncXray(mat) {
+  const v = +$('#xray').value;
+  mat.transparent = v < 1; mat.opacity = v; mat.depthWrite = v >= 1; mat.needsUpdate = true;
+}
+
+// layers and x-ray
+$('.seg').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-layer]'); if (!b) return;
+  const mode = b.dataset.layer;
+  document.querySelectorAll('.seg [data-layer]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  layers.skeleton.forEach((m) => (m.visible = mode !== 'muscles'));
+  [...layers.deep, ...layers.superficial].forEach((m) => (m.visible = mode !== 'bones'));
+  if (selected && !selected.visible) select(null);
+  render();
+});
+$('#xray').addEventListener('input', () => {
+  if (!mats) return;
+  [mats['Outer muscle'], mats.hover['Outer muscle'], mats.pick['Outer muscle']].forEach(syncXray);
+  render();
+});
+
+// picking: hover while the pointer rests, click to select
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+let down = null, hoverTimer = 0;
+function pickAt(x, y) {
+  ndc.set(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const xr = +$('#xray').value < 0.35;
+  const hit = ray.intersectObjects(meshes.filter((m) => m.visible && !(xr && m.userData.layer === 'superficial muscles')), false)[0];
+  return hit ? hit.object : null;
+}
+renderer.domElement.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY }; });
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!down || !mats) return;
+  if (Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) select(pickAt(e.clientX, e.clientY));
+  down = null;
+});
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (!mats || e.pointerType !== 'mouse' || e.buttons) return;
+  clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => {
+    const m = pickAt(e.clientX, e.clientY);
+    if (m === hovered) return;
+    const old = hovered; hovered = m; paint(old); paint(m);
+    renderer.domElement.style.cursor = m ? 'pointer' : '';
+    render();
+  }, 60);
+});
+renderer.domElement.addEventListener('dblclick', () => { flyTo(home.pos, home.target); });
+
+const LAYER_LABEL = { skeleton: 'Skeleton', 'deep muscles': 'Deep muscle', 'superficial muscles': 'Superficial muscle' };
+function select(m, frame) {
+  const old = selected; selected = m; paint(old); paint(m);
+  const info = $('#info');
+  if (!m) { info.classList.remove('on'); render(); return; }
+  const x = m.userData;
+  $('#iName').textContent = m.userData.name || m.name;
+  const rows = [['Layer', LAYER_LABEL[x.layer] || x.layer], ['Side', x.side]];
+  if (x.group) rows.push(['Part of', x.group]);
+  if (x.tissue && x.tissue !== 'bone') rows.push(['Tissue', x.tissue]);
+  rows.push(['Source', x.source]);
+  if (x.fma) rows.push(['FMA', x.fma]);
+  const dl = $('#iMeta'); dl.replaceChildren();
+  rows.forEach(([k, v]) => { const dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = k; dd.textContent = v; dl.append(dt, dd); });
+  info.classList.add('on');
+  if (frame) {
+    const box = new THREE.Box3().setFromObject(m), c = box.getCenter(new THREE.Vector3()), r = Math.max(0.12, box.getSize(new THREE.Vector3()).length() * 0.9);
+    // look at the structure from the side it faces: outward from the body's long axis
+    const dir = new THREE.Vector3(c.x, 0, c.z - 0.02);
+    if (dir.length() < 0.03) dir.copy(camera.position).sub(controls.target).setY(0);
+    dir.normalize().setY(0.18).normalize();
+    flyTo(c.clone().addScaledVector(dir, r / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))), c);
+  }
+  render();
+}
+$('#close').addEventListener('click', () => select(null));
+addEventListener('keydown', (e) => { if (e.key === 'Escape') select(null); });
+function flyTo(p, c) { fly = { t0: performance.now(), p0: camera.position.clone(), p1: p.clone(), c0: controls.target.clone(), c1: c.clone() }; }
+
+// search
+function buildSearch() {
+  const q = $('#q'), out = $('#results');
+  const items = meshes.map((m) => ({ m, n: (m.userData.name || m.name).toLowerCase() }));
+  const show = () => {
+    const s = q.value.trim().toLowerCase(); out.replaceChildren();
+    if (s.length < 2) return;
+    const words = s.split(/\s+/);
+    items.filter((i) => words.every((w) => i.n.includes(w))).slice(0, 12).forEach(({ m }) => {
+      const li = document.createElement('li'), b = document.createElement('button'), sm = document.createElement('small');
+      b.type = 'button'; b.textContent = (m.userData.name || m.name) + ' '; sm.textContent = LAYER_LABEL[m.userData.layer]; b.append(sm);
+      b.addEventListener('click', () => {
+        if (!m.visible) document.querySelector('.seg [data-layer="both"]').click();
+        select(m, true); out.replaceChildren(); q.value = m.userData.name || m.name;
+      });
+      li.append(b); out.append(li);
+    });
+  };
+  q.addEventListener('input', show);
+  q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const b = out.querySelector('button'); if (b) b.click(); } });
+}
+</script>
+</body>
+</html>
