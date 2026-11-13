@@ -6,8 +6,8 @@ import { GoogleGenAI } from '@google/genai';
 import Groq from 'groq-sdk';
 import { UpdateProfileSchema } from './src/types/astronaut.ts';
 import type { ExerciseCategory, FitnessAIAnalysis } from './src/types/astronaut.ts';
-import { 
-  getProfile, 
+import {
+  getProfile,
   updateProfile,
   getVitals,
   updateVitals,
@@ -21,7 +21,35 @@ import {
   getExercises,
   getExercisesByCategory,
   evaluateExercisesForAstronaut,
+  getCrewMembers,
+  getRestrictions,
+  addRestriction,
+  updateRestriction,
+  deleteRestriction,
+  getDoctorNotes,
+  addDoctorNote,
+  updateDoctorNote,
+  getConversations,
+  getMessages,
+  sendMedicalMessage,
+  getMedicalAlerts,
+  acknowledgeAlert,
+  resolveAlert,
+  getExchangedReports,
+  getExchangedReportById,
+  createExchangedReport,
+  reviewExchangedReport,
+  forwardExchangedReport,
+  deleteExchangedReport,
+  addTimelineEvent,
 } from './src/server/mockDb.ts';
+import {
+  getNutritionInventory,
+  getDailyNutritionLog,
+  takeNutrientItem,
+  logHydration,
+  getInventoryAlerts,
+} from './src/server/nutriDb.ts';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -324,6 +352,382 @@ app.delete('/api/symptoms/:id', (req: Request, res: Response) => {
     res.json({ success: true, message: 'Symptom report removed from active tracking' });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error?.message || 'Failed to delete symptom' });
+  }
+});
+
+// GET /api/crew — Expedition 74 Crew Health Overview
+app.get('/api/crew', (_req: Request, res: Response) => {
+  try {
+    const crew = getCrewMembers();
+    res.json({ success: true, data: crew });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch crew members' });
+  }
+});
+
+// GET /api/alerts — Medical Alerts Registry
+app.get('/api/alerts', (_req: Request, res: Response) => {
+  try {
+    const alerts = getMedicalAlerts();
+    res.json({ success: true, data: alerts });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch medical alerts' });
+  }
+});
+
+// POST /api/alerts/:id/acknowledge — Acknowledge Alert by Flight Surgeon
+app.post('/api/alerts/:id/acknowledge', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { surgeonName } = req.body;
+    const updated = acknowledgeAlert(id, surgeonName || 'Dr. Marcus Vance, M.D.');
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Alert not found' });
+    }
+    res.json({ success: true, data: updated, message: 'Medical alert acknowledged by Flight Surgeon' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to acknowledge alert' });
+  }
+});
+
+// DELETE /api/alerts/:id — Dismiss or Resolve Alert
+app.delete('/api/alerts/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const deleted = resolveAlert(id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: 'Alert not found' });
+    }
+    res.json({ success: true, message: 'Medical alert cleared from active queue' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to clear alert' });
+  }
+});
+
+// GET /api/restrictions — Medical Restrictions List
+app.get('/api/restrictions', (req: Request, res: Response) => {
+  try {
+    const astronautId = req.query.astronautId as string | undefined;
+    const restrictions = getRestrictions(astronautId);
+    res.json({ success: true, data: restrictions });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch restrictions' });
+  }
+});
+
+// POST /api/restrictions — Prescribe new Medical Restriction
+app.post('/api/restrictions', (req: Request, res: Response) => {
+  try {
+    const { astronautId, astronautName, name, description, affectedRegion, restrictedExercises, severity, effectiveDate, status, prescribedBy, clinicalRationale } = req.body;
+    if (!name || !description || !affectedRegion) {
+      return res.status(400).json({ success: false, error: 'Name, description, and affectedRegion are required' });
+    }
+    const created = addRestriction({
+      astronautId: astronautId || 'ASTRO-74-SJ',
+      astronautName: astronautName || 'Dr. Salma Johnson',
+      name,
+      description,
+      affectedRegion,
+      restrictedExercises: Array.isArray(restrictedExercises) ? restrictedExercises : [],
+      severity: severity || 'Moderate',
+      effectiveDate: effectiveDate || `MET D+84 (${new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit' })})`,
+      status: status || 'Active',
+      prescribedBy: prescribedBy || 'Dr. Marcus Vance, M.D., FACEP (Lead Flight Surgeon)',
+      clinicalRationale: clinicalRationale || 'Flight Medicine Countermeasure Safety Directive',
+    });
+    res.status(201).json({ success: true, data: created, message: 'Medical restriction successfully prescribed' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to create restriction' });
+  }
+});
+
+// PATCH /api/restrictions/:id — Update or lift Medical Restriction
+app.patch('/api/restrictions/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const updated = updateRestriction(id, req.body);
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Medical restriction not found' });
+    }
+    res.json({ success: true, data: updated, message: 'Medical restriction updated' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to update restriction' });
+  }
+});
+
+// DELETE /api/restrictions/:id — Remove restriction
+app.delete('/api/restrictions/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const deleted = deleteRestriction(id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: 'Medical restriction not found' });
+    }
+    res.json({ success: true, message: 'Medical restriction deleted' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to delete restriction' });
+  }
+});
+
+// GET /api/doctor-notes — Flight Surgeon Clinical Notes
+app.get('/api/doctor-notes', (req: Request, res: Response) => {
+  try {
+    const astronautId = req.query.astronautId as string | undefined;
+    const notes = getDoctorNotes(astronautId);
+    res.json({ success: true, data: notes });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch doctor notes' });
+  }
+});
+
+// POST /api/doctor-notes — Add new Clinical Note
+app.post('/api/doctor-notes', (req: Request, res: Response) => {
+  try {
+    const { astronautId, astronautName, category, title, content, relatedSymptoms, vitalsSnapshot, status, author } = req.body;
+    if (!title || !content) {
+      return res.status(400).json({ success: false, error: 'Title and content are required' });
+    }
+    const created = addDoctorNote({
+      astronautId: astronautId || 'ASTRO-74-SJ',
+      astronautName: astronautName || 'Dr. Salma Johnson',
+      author: author || 'Dr. Marcus Vance, M.D., FACEP (Lead Flight Surgeon)',
+      category: category || 'Routine Assessment',
+      title,
+      content,
+      relatedSymptoms: Array.isArray(relatedSymptoms) ? relatedSymptoms : [],
+      vitalsSnapshot,
+      status: status || 'Finalized',
+    });
+    res.status(201).json({ success: true, data: created, message: 'Clinical note recorded to medical registry' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to record doctor note' });
+  }
+});
+
+// PATCH /api/doctor-notes/:id — Update Clinical Note
+app.patch('/api/doctor-notes/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const updated = updateDoctorNote(id, req.body);
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Doctor note not found' });
+    }
+    res.json({ success: true, data: updated, message: 'Clinical note updated' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to update doctor note' });
+  }
+});
+
+// GET /api/communications/conversations — Medical Communications Channels
+app.get('/api/communications/conversations', (_req: Request, res: Response) => {
+  try {
+    const conversations = getConversations();
+    res.json({ success: true, data: conversations });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch conversations' });
+  }
+});
+
+// GET /api/communications/messages/:conversationId — Conversation Messages
+app.get('/api/communications/messages/:conversationId', (req: Request, res: Response) => {
+  try {
+    const { conversationId } = req.params;
+    const messages = getMessages(conversationId);
+    res.json({ success: true, data: messages });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch messages' });
+  }
+});
+
+// POST /api/communications/messages — Send Message in Telemedicine Network
+app.post('/api/communications/messages', (req: Request, res: Response) => {
+  try {
+    const { conversationId, content, messageType, priority } = req.body;
+    if (!conversationId || !content || !content.trim()) {
+      return res.status(400).json({ success: false, error: 'conversationId and content are required' });
+    }
+    const message = sendMedicalMessage(conversationId, content, messageType, priority);
+    res.status(201).json({ success: true, data: message, message: 'Message transmitted via Ground Control Relay' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to send message' });
+  }
+});
+
+// ─── Exchanged Medical Reports & Referrals Endpoints ─────────────────────────
+
+// GET /api/reports/exchanged — Fetch all exchanged medical documents & referrals
+app.get('/api/reports/exchanged', (_req: Request, res: Response) => {
+  try {
+    const reports = getExchangedReports();
+    res.json({ success: true, data: reports });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch exchanged reports' });
+  }
+});
+
+// GET /api/reports/exchanged/:id — Fetch single report
+app.get('/api/reports/exchanged/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const report = getExchangedReportById(id);
+    if (!report) {
+      return res.status(404).json({ success: false, error: 'Medical report not found' });
+    }
+    res.json({ success: true, data: report });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch medical report' });
+  }
+});
+
+// POST /api/reports/exchanged — Upload / Transmit new Medical Report to another doctor
+app.post('/api/reports/exchanged', (req: Request, res: Response) => {
+  try {
+    const {
+      title,
+      documentType,
+      astronautId,
+      astronautName,
+      astronautCallsign,
+      authorId,
+      authorName,
+      authorRole,
+      recipientDoctorId,
+      recipientDoctorName,
+      recipientDoctorRole,
+      urgency,
+      clinicalSummary,
+      findings,
+      referralQuestion,
+      vitalsSnapshot,
+      attachments,
+    } = req.body;
+
+    if (!title || !recipientDoctorId || !clinicalSummary) {
+      return res.status(400).json({
+        success: false,
+        error: 'Title, recipientDoctorId, and clinicalSummary are required to transmit a medical report.',
+      });
+    }
+
+    const created = createExchangedReport({
+      title,
+      documentType: documentType || 'Clinical Specialist Referral',
+      astronautId: astronautId || 'ASTRO-74-SJ',
+      astronautName: astronautName || 'Dr. Salma Johnson',
+      astronautCallsign: astronautCallsign || 'Nova',
+      authorId: authorId || 'user-fs-vance',
+      authorName: authorName || 'Dr. Marcus Vance, M.D., FACEP',
+      authorRole: authorRole || 'Lead Flight Surgeon (MCC Houston / JSC)',
+      recipientDoctorId,
+      recipientDoctorName: recipientDoctorName || 'Consulting Specialist',
+      recipientDoctorRole: recipientDoctorRole || 'Flight Medicine Specialist',
+      urgency: urgency || 'routine',
+      status: 'transmitted',
+      clinicalSummary,
+      findings: Array.isArray(findings) ? findings : [],
+      referralQuestion: referralQuestion || 'Requesting clinical review and evaluation.',
+      vitalsSnapshot,
+      attachments,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: created,
+      message: `Medical report "${created.reportNumber}" transmitted to ${created.recipientDoctorName} via TDRS relay`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to create medical report' });
+  }
+});
+
+// POST /api/reports/exchanged/:id/review — Review and reply with Clinical Endorsement
+app.post('/api/reports/exchanged/:id/review', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const {
+      reviewerId,
+      reviewerName,
+      reviewerRole,
+      action,
+      feedbackNotes,
+      recommendedModifications,
+      signatureCredential,
+    } = req.body;
+
+    if (!feedbackNotes) {
+      return res.status(400).json({ success: false, error: 'feedbackNotes is required for clinical review' });
+    }
+
+    const updated = reviewExchangedReport(id, {
+      reviewerId,
+      reviewerName,
+      reviewerRole,
+      action: action || 'endorsed',
+      feedbackNotes,
+      recommendedModifications,
+      signatureCredential,
+    });
+
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Report not found' });
+    }
+
+    res.json({
+      success: true,
+      data: updated,
+      message: 'Clinical endorsement and review notes logged to document registry',
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to submit review' });
+  }
+});
+
+// POST /api/reports/exchanged/:id/forward — Forward / Refer Report to another doctor
+app.post('/api/reports/exchanged/:id/forward', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { toDoctorId, toDoctorName, toDoctorRole, fromDoctorName, reason } = req.body;
+
+    if (!toDoctorId || !toDoctorName || !reason) {
+      return res.status(400).json({
+        success: false,
+        error: 'toDoctorId, toDoctorName, and forwarding reason are required',
+      });
+    }
+
+    const updated = forwardExchangedReport(id, {
+      toDoctorId,
+      toDoctorName,
+      toDoctorRole: toDoctorRole || 'Flight Medicine Specialist',
+      fromDoctorName,
+      reason,
+    });
+
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Report not found' });
+    }
+
+    res.json({
+      success: true,
+      data: updated,
+      message: `Medical report referred and forwarded to ${toDoctorName}`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to forward report' });
+  }
+});
+
+// DELETE /api/reports/exchanged/:id — Remove or Archive report
+app.delete('/api/reports/exchanged/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const deleted = deleteExchangedReport(id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: 'Report not found' });
+    }
+    res.json({ success: true, message: 'Medical document archived from active exchange' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to delete report' });
   }
 });
 
@@ -876,24 +1280,187 @@ Instructions:
   }
 });
 
+// ─── NutriLog & Bio-Kitchen API Endpoints ─────────────────────────────────────
+
+app.get('/api/nutrition/inventory', (_req: Request, res: Response) => {
+  try {
+    const inventory = getNutritionInventory();
+    res.json({ success: true, data: inventory });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch inventory' });
+  }
+});
+
+app.get('/api/nutrition/daily-log', (_req: Request, res: Response) => {
+  try {
+    const log = getDailyNutritionLog();
+    res.json({ success: true, data: log });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch daily nutrition log' });
+  }
+});
+
+app.get('/api/nutrition/alerts', (_req: Request, res: Response) => {
+  try {
+    const alerts = getInventoryAlerts();
+    res.json({ success: true, data: alerts });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to fetch inventory alerts' });
+  }
+});
+
+app.post('/api/nutrition/take', (req: Request, res: Response) => {
+  try {
+    const { itemId, qty = 1 } = req.body;
+    if (!itemId) {
+      return res.status(400).json({ success: false, error: 'itemId is required' });
+    }
+
+    const result = takeNutrientItem(itemId, Number(qty));
+    if (!result) {
+      return res.status(404).json({ success: false, error: 'Item not found or insufficient stock' });
+    }
+
+    addTimelineEvent({
+      type: 'vitals',
+      title: `Nutrition Intake: ${result.item.name}`,
+      summary: `Administered ${qty}x ${result.item.unit} (${result.item.category}). Calories: +${(result.item.calories || 0) * qty} kcal. Key nutrients: ${result.item.keyNutrients.join(', ')}`,
+      severity: 'nominal',
+      badge: 'NUTRILOG',
+      details: {
+        itemId: result.item.id,
+        category: result.item.category,
+        remainingStock: result.item.currentStock,
+      },
+    });
+
+    res.json({
+      success: true,
+      item: result.item,
+      log: result.log,
+      message: `${result.item.name} recorded and inventory synchronized.`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to log nutrient consumption' });
+  }
+});
+
+app.post('/api/nutrition/hydration', (req: Request, res: Response) => {
+  try {
+    const { amountMl } = req.body;
+    if (!amountMl || typeof amountMl !== 'number') {
+      return res.status(400).json({ success: false, error: 'Valid amountMl number is required' });
+    }
+
+    const log = logHydration(amountMl);
+
+    if (log.hydrationLiters >= 2.0 && log.hydrationLiters - (amountMl / 1000) < 2.0) {
+      addTimelineEvent({
+        type: 'vitals',
+        title: 'Daily Hydration Milestone Reached',
+        summary: `Current intake: ${log.hydrationLiters} L / 2.5 L goal. Counteracting cephalic fluid shift and renal calculus risk.`,
+        severity: 'nominal',
+        badge: 'HYDRATION',
+      });
+    }
+
+    res.json({ success: true, log, message: `+${amountMl} mL hydration logged.` });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to log hydration' });
+  }
+});
+
+app.post('/api/nutrition/ai-plan', async (req: Request, res: Response) => {
+  try {
+    const { profile } = req.body;
+    const radDose = profile?.radiationDoseMsv ?? 14.8;
+    const spineDelta = profile?.spineElongation ?? 4.2;
+    const hr = profile?.restingHeartRate ?? 58;
+    const missionDay = profile?.missionElapsedDays ?? 84;
+
+    const ai = getGeminiClient();
+    if (ai) {
+      try {
+        const prompt = `You are the NASA Flight Surgeon & Space Nutrition Lead aboard the Artemis / ISS Expedition.
+Generate a concise, 4 to 5 bullet point Daily Space Nutrition & Countermeasure Protocol for Astronaut Dr. Salma Johnson (MET Day ${missionDay}):
+- Cumulative Ionizing Radiation Dose: ${radDose} mSv
+- Microgravity Spine Elongation: +${spineDelta} cm
+- Resting Baseline HR: ${hr} bpm
+
+Requirements:
+- Specify exact NASA dietary countermeasures (e.g. Lycopene/Vitamin E for radiation DNA protection, Calcium/D3 & Collagen for microgravity bone demineralization, Electrolytes for fluid shift).
+- Tone: Professional aerospace clinical protocol. Bullet points starting with emojis.`;
+
+        const response: any = await Promise.race([
+          ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: prompt,
+          }),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('AI request timeout')), 5000)),
+        ]);
+
+        const text = response.text?.trim();
+        if (text) {
+          return res.json({ success: true, plan: text, source: 'gemini-3.8-flash' });
+        }
+      } catch (geminiError: any) {
+        console.warn('[Gemini Nutri Plan fallback]:', geminiError?.message);
+      }
+    }
+
+    const fallbackLines = [
+      `🍅 Radiation Protocol: Cumulative dose at ${radDose} mSv. Prioritize 1x Lycopene Pouch + 2x Vitamin E & C Shield Tablets to quench ionizing free radicals.`,
+      `🦴 Musculoskeletal Countermeasure: +${spineDelta} cm spinal elongation detected. Take Calcium-D3 Yogurt Pouch + Collagen Pack post-ARED resistance workout.`,
+      `💧 Electrolyte & Fluid Balance: Drink minimum 2.5 L treated water with 1x Electrolyte Sachet to prevent orthostatic intolerance.`,
+      `😴 Circadian & Recovery: Take Magnesium Glycinate + Chamomile Infusion 45 minutes before sleep pod light dimming.`,
+      `🧠 Neuro-Cognitive Defense: 2x Omega-3 DHA/EPA softgels with lunch to preserve neuronal membranes against cosmic ray micro-trauma.`,
+    ];
+
+    res.json({
+      success: true,
+      plan: fallbackLines.join('\n'),
+      source: 'aerospace-clinical-matrix',
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to generate meal plan' });
+  }
+});
+
 
 // Mount Vite or static server
 async function startServer() {
-  if (!isProd) {
+  const fs = await import('fs');
+  const path = await import('path');
+
+  // 1. Serve public static assets (images, icons, 3D models)
+  app.use(express.static(path.resolve(process.cwd(), 'public')));
+
+  // 2. Check for built production bundle in dist/
+  const distPath = path.resolve(process.cwd(), 'dist');
+  const hasDist = fs.existsSync(path.resolve(distPath, 'index.html'));
+
+  if (isProd || hasDist) {
+    app.use(express.static(distPath));
+    app.get('*', (req: Request, res: Response, next) => {
+      if (req.originalUrl.startsWith('/api')) return next();
+      res.sendFile(path.resolve(distPath, 'index.html'));
+    });
+  } else {
+    // 3. Vite development SPA middleware
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
-    app.use(express.static('dist'));
-    app.get('*', (_req: Request, res: Response) => {
-      res.sendFile('dist/index.html', { root: '.' });
-    });
   }
 
   app.listen(PORT, 'localhost', () => {
     console.log(`[ASTROCARE] Server running on http://localhost:${PORT}`);
+  });
+}
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[ASTROCARE] Server running on http://0.0.0.0:${PORT}`);
   });
 }
 

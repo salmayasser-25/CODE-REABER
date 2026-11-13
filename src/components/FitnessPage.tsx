@@ -281,7 +281,7 @@ export const FitnessPage: React.FC<FitnessPageProps> = ({ profile }) => {
             {/* Recommendations */}
             {aiAnalysis.recommendations && aiAnalysis.recommendations.length > 0 && (
               <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-800">
-                {aiAnalysis.recommendations.map((r, i) => (
+                {aiAnalysis.recommendations.map((r: string, i: number) => (
                   <span
                     key={i}
                     className="px-2.5 py-1 rounded-lg text-xs font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
