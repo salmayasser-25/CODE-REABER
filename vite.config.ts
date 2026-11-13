@@ -12,7 +12,7 @@ export default defineConfig(() => {
       },
     },
     server: {
-      allowedHosts: ['sb-7ggdz8szlwjr.vercel.run'],
+      allowedHosts: ['sb-7ggdz8szlwjr.vercel.run', 'sb-2nd4djcw417f.vercel.run'],
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
