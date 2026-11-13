@@ -13,6 +13,8 @@ import {
   FileText,
   Gauge,
   Dumbbell,
+  LayoutDashboard,
+  Bot,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.tsx';
 
@@ -115,6 +117,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
       sublabel: 'ECLSS & NASA DONKI',
       icon: Gauge,
       phase: 'Space Weather',
+    },
+    {
+      id: 'surgeon-overview',
+      path: '/surgeon-overview',
+      label: 'Crew Medical Matrix',
+      sublabel: 'Flight Surgeon Oversight',
+      icon: LayoutDashboard,
+      phase: 'Surgeon Hub',
+    },
+    {
+      id: 'medical-assistant',
+      path: '/medical-assistant',
+      label: 'AI Medical Assistant',
+      sublabel: 'Triage & Surgeon Escalation',
+      icon: Bot,
+      phase: '4-Tier Triage',
     },
   ];
 

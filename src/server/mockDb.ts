@@ -7,6 +7,7 @@ import type {
   TimelineEvent,
   SpaceExercise,
   ExerciseCategory,
+  WorkoutSessionLog,
   MedicalRestriction,
   DoctorNote,
   MedicalMessage,
@@ -39,7 +40,7 @@ export let currentAstronautProfile: AstronautProfile = {
   role: 'Mission Specialist / Payload Bio-Engineer',
   missionId: 'EXP-74 / ARTEMIS BIO-LAB',
   healthStatus: 'nominal',
-  photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+  photoUrl: '/images/astronaut_salma_portrait.jpg',
   totalEvaHours: 28.5,
   bloodType: 'O-Positive (O+)',
   spineElongation: 4.2, // +4.2 cm microgravity spinal adaptation delta
@@ -477,53 +478,8 @@ const spaceExercises: SpaceExercise[] = [
     intensity: 'Moderate',
     status: 'available',
   },
-  {
-    id: 'ex-ared-trunk-rotation',
-    name: 'ARED Trunk Rotation',
-    description: 'Resisted rotational movement for oblique strengthening and spinal disc hydration cycling.',
-    category: 'Core',
-    equipment: 'ARED',
-    durationMinutes: 10,
-    caloriesBurned: 70,
-    targetMuscles: ['External Obliques', 'Internal Obliques', 'Erector Spinae'],
-    contraindications: ['Spinal Elongation', 'Lumbar Disc Herniation', 'Cervical Disc Decompression'],
-    videoUrl: '/videos/ared-trunk-rotation.mp4',
-    thumbnailUrl: '/videos/thumbnails/ared-trunk-rotation.jpg',
-    intensity: 'Moderate',
-    status: 'available',
-  },
-  {
-    id: 'ex-bungee-crunch',
-    name: 'Bungee-Cord Crunch',
-    description: 'Abdominal crunch using bungee cord resistance to simulate gravitational loading on rectus abdominis.',
-    category: 'Core',
-    equipment: 'Bungee Cord System',
-    durationMinutes: 10,
-    caloriesBurned: 65,
-    targetMuscles: ['Rectus Abdominis', 'Hip Flexors'],
-    contraindications: ['Cephalic Fluid Shift', 'Intracranial Pressure Elevation'],
-    videoUrl: '/videos/bungee-crunch.mp4',
-    thumbnailUrl: '/videos/thumbnails/bungee-crunch.jpg',
-    intensity: 'Low',
-    status: 'available',
-  },
 
   // ── Full Body ──
-  {
-    id: 'ex-cevis-cycling',
-    name: 'CEVIS Ergometer Cycling',
-    description: 'Continuous aerobic cycling on the Cycle Ergometer with Vibration Isolation System for cardiovascular conditioning.',
-    category: 'Full Body',
-    equipment: 'CEVIS',
-    durationMinutes: 30,
-    caloriesBurned: 250,
-    targetMuscles: ['Quadriceps', 'Hamstrings', 'Gastrocnemius', 'Cardiovascular System'],
-    contraindications: ['Cardiac Arrhythmia', 'Orthostatic Intolerance'],
-    videoUrl: '/videos/cevis-cycling.mp4',
-    thumbnailUrl: '/videos/thumbnails/cevis-cycling.jpg',
-    intensity: 'Moderate',
-    status: 'available',
-  },
   {
     id: 'ex-t2-treadmill',
     name: 'T2 Treadmill Running',
@@ -621,7 +577,11 @@ export const evaluateExercisesForAstronaut = (): {
     }
 
     // High-value safe countermeasures get recommended status
-    if (ex.id === 'ex-cevis-cycling' || ex.id === 'ex-core-stabilization' || ex.id === 'ex-ared-heel-raise') {
+    if (
+      ex.id === 'ex-resistive-band-circuit' ||
+      ex.id === 'ex-core-stabilization' ||
+      ex.id === 'ex-ared-heel-raise'
+    ) {
       return { ...ex, status: 'recommended' as const };
     }
 
@@ -629,6 +589,60 @@ export const evaluateExercisesForAstronaut = (): {
   });
 
   return { exercises, restricted };
+};
+
+// ─── Completed Workout Sessions Log ─────────────────────────────────────────
+export let completedWorkoutSessions: WorkoutSessionLog[] = [
+  {
+    id: 'WKT-84-01',
+    exerciseId: 'ex-resistive-band-circuit',
+    exerciseName: 'Resistive Band Full-Body Circuit',
+    category: 'Full Body',
+    equipment: 'Resistance Bands',
+    durationMinutes: 25,
+    actualDurationSeconds: 1500,
+    caloriesBurned: 200,
+    avgHeartRate: 122,
+    peakHeartRate: 136,
+    notes: 'Morning full-body resistance band conditioning protocol. Zero axial spinal compression reported.',
+    completedAt: new Date(Date.now() - 3600000 * 6).toISOString(),
+  },
+];
+
+export const getWorkoutSessions = (): WorkoutSessionLog[] => {
+  return completedWorkoutSessions;
+};
+
+export const logWorkoutSession = (
+  session: Omit<WorkoutSessionLog, 'id' | 'completedAt'>
+): WorkoutSessionLog => {
+  const newSession: WorkoutSessionLog = {
+    ...session,
+    id: `WKT-84-${String(completedWorkoutSessions.length + 1).padStart(2, '0')}`,
+    completedAt: new Date().toISOString(),
+  };
+
+  completedWorkoutSessions = [newSession, ...completedWorkoutSessions];
+
+  // Synchronize with Unified Medical & Telemetry Timeline
+  addTimelineEvent({
+    type: 'exercise_eva',
+    title: `Countermeasure Completed: ${newSession.exerciseName}`,
+    summary: `Equipment: ${newSession.equipment} · Duration: ${newSession.durationMinutes} min · Energy Output: ${newSession.caloriesBurned} kcal · Avg HR: ${newSession.avgHeartRate} bpm (Peak ${newSession.peakHeartRate} bpm)`,
+    details: {
+      exerciseId: newSession.exerciseId,
+      equipment: newSession.equipment,
+      durationMinutes: newSession.durationMinutes,
+      caloriesBurned: newSession.caloriesBurned,
+      avgHeartRate: newSession.avgHeartRate,
+      peakHeartRate: newSession.peakHeartRate,
+      notes: newSession.notes,
+    },
+    severity: 'nominal',
+    badge: 'EXERCISE',
+  });
+
+  return newSession;
 };
 
 // ─── Flight Surgeon Crew Registry ───────────────────────────────────────────
@@ -640,7 +654,7 @@ export let currentCrewMembers: CrewMemberSummary[] = [
     callsign: 'Nova',
     role: 'Mission Specialist / Payload Bio-Engineer',
     missionId: 'EXP-74 / ARTEMIS BIO-LAB',
-    photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+    photoUrl: '/images/astronaut_salma_portrait.jpg',
     healthStatus: 'monitoring',
     heartRate: 72,
     bloodPressure: '118/76',
@@ -1202,7 +1216,7 @@ export let currentMedicalAlerts: MedicalAlert[] = [
     astronautId: 'ASTRO-74-SJ',
     astronautName: 'Dr. Salma Johnson',
     astronautCallsign: 'Nova',
-    photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+    photoUrl: '/images/astronaut_salma_portrait.jpg',
     title: 'Microgravity Spinal Elongation Delta (+4.2 cm)',
     description: 'Ultrasonic bio-telemetry confirms +4.2 cm total intervertebral disc decompression exceeding 3.0 cm mission threshold. High acute disc herniation risk under axial loading.',
     severity: 'critical',
@@ -1216,7 +1230,7 @@ export let currentMedicalAlerts: MedicalAlert[] = [
     astronautId: 'ASTRO-74-SJ',
     astronautName: 'Dr. Salma Johnson',
     astronautCallsign: 'Nova',
-    photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+    photoUrl: '/images/astronaut_salma_portrait.jpg',
     title: 'Active Musculoskeletal Symptom: Lumbar Spine L3-L5',
     description: 'Astronaut logged dull lumbar ache (Intensity 4/10) following 90m ARED countermeasure block.',
     severity: 'warning',
@@ -1231,7 +1245,7 @@ export let currentMedicalAlerts: MedicalAlert[] = [
     astronautId: 'ASTRO-74-SJ',
     astronautName: 'Dr. Salma Johnson',
     astronautCallsign: 'Nova',
-    photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+    photoUrl: '/images/astronaut_salma_portrait.jpg',
     title: 'Resting Heart Rate Elevation (+14 bpm over baseline)',
     description: 'Resting heart rate telemetry reached 72 bpm compared to 58 bpm flight baseline, correlated with 5.9h fragmented sleep in Node 2.',
     severity: 'warning',
@@ -1245,7 +1259,7 @@ export let currentMedicalAlerts: MedicalAlert[] = [
     astronautId: 'ASTRO-74-SJ',
     astronautName: 'Dr. Salma Johnson',
     astronautCallsign: 'Nova',
-    photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+    photoUrl: '/images/astronaut_salma_portrait.jpg',
     title: 'Cephalic Fluid Shift Grade I (Frontal Sinus Fullness)',
     description: 'Sub-clinical microgravity headward fluid redistribution noted upon orbital wake-up. Cleared after 30 mins upright CEVIS cycling.',
     severity: 'info',

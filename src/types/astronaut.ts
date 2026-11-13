@@ -132,7 +132,7 @@ export interface SpaceExercise {
   intensity: 'Low' | 'Moderate' | 'High';
   status: ExerciseStatus;
   warningMessage?: string; // shown when restricted
-  restrictionReason?: string;
+  restrictionReason?: string; // reason why restricted
 }
 
 export interface FitnessAIAnalysis {
@@ -141,9 +141,24 @@ export interface FitnessAIAnalysis {
   restrictedExercises: { exerciseId: string; reason: string }[];
   dailyPlan: string;
   cautions: string[];
-  fitnessScore?: number;
   recommendations?: string[];
+  fitnessScore?: number;
   timestamp: string;
+}
+
+export interface WorkoutSessionLog {
+  id: string;
+  exerciseId: string;
+  exerciseName: string;
+  category: ExerciseCategory;
+  equipment: string;
+  durationMinutes: number;
+  actualDurationSeconds: number;
+  caloriesBurned: number;
+  avgHeartRate: number;
+  peakHeartRate: number;
+  notes?: string;
+  completedAt: string;
 }
 
 export type TimelineEventType = 'vitals' | 'symptom' | 'ai_insight' | 'checkin' | 'exercise_eva' | 'restriction' | 'doctor_note';
@@ -427,8 +442,5 @@ export interface MedicalAssistantContext {
   aiHistoryCount: number;
   doctorHistoryCount: number;
 }
-
-
-
 
 

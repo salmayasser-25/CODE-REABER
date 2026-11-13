@@ -22,9 +22,15 @@ import { ChatMessage, AstronautProfile } from '../types/astronaut.ts';
 
 const AVATAR_MODEL_URL = '/models/corpus_mira_space_marine_bust.glb';
 
+const registerLegacyGltfExtensions = (loader: any) => {
+  if (loader && typeof loader.register === 'function') {
+    loader.register(() => ({ name: 'KHR_materials_pbrSpecularGlossiness' }));
+  }
+};
+
 // Pre-load the avatar model from local static storage
 try {
-  useGLTF.preload(AVATAR_MODEL_URL);
+  useGLTF.preload(AVATAR_MODEL_URL, true, true, registerLegacyGltfExtensions);
 } catch {
   // Preload safety catch
 }
@@ -41,8 +47,8 @@ class ModelErrorBoundary extends React.Component<
   static getDerivedStateFromError() {
     return { hasError: true };
   }
-  componentDidCatch(err: any) {
-    console.warn('Avatar model failed to render, switching to fallback:', err?.message);
+  componentDidCatch() {
+    // Handled gracefully by fallback UI
   }
   render() {
     if (this.state.hasError) {
@@ -54,7 +60,7 @@ class ModelErrorBoundary extends React.Component<
 
 // 3D Avatar component that renders the GLB bust and animates idle breathing
 function AvatarModel() {
-  const gltf = useGLTF(AVATAR_MODEL_URL);
+  const gltf = useGLTF(AVATAR_MODEL_URL, true, true, registerLegacyGltfExtensions);
   const meshRef = useRef<THREE.Group | null>(null);
 
   // Idle gentle breathing & floating animation
