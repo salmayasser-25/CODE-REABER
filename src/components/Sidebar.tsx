@@ -1,34 +1,36 @@
 import React from 'react';
-import { 
-  UserCheck, 
-  Activity, 
-  Stethoscope, 
-  Cpu, 
+import { NavLink } from 'react-router-dom';
+import {
+  UserCheck,
+  Activity,
+  Stethoscope,
+  Cpu,
   Orbit,
   Heart,
   ClipboardCheck,
   Clock,
   Radio,
   FileText,
-  Gauge
+  Gauge,
+  Dumbbell,
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext.tsx';
 
 interface SidebarProps {
-  currentTab?: string;
-  onSelectTab?: (tab: string) => void;
   astronautName?: string;
   callsign?: string;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  currentTab = 'profile',
-  onSelectTab,
   astronautName = 'Dr. Salma Johnson',
   callsign = 'Nova',
 }) => {
+  const { role } = useAuth();
+
   const navItems = [
     {
       id: 'profile',
+      path: '/profile',
       label: 'Astronaut Profile',
       sublabel: 'Crew Dossier & Adaptations',
       icon: UserCheck,
@@ -36,6 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'vitals',
+      path: '/vitals',
       label: 'Vital Signs & AI',
       sublabel: 'Biometrics & Gemini Insight',
       icon: Activity,
@@ -43,13 +46,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'checkin',
+      path: '/checkin',
       label: 'Daily Health Check-in',
       sublabel: 'Subjective Mood & Sleep',
       icon: ClipboardCheck,
       phase: 'Daily Survey',
     },
     {
+      id: 'fitness',
+      path: '/fitness',
+      label: 'Fitness Protocol',
+      sublabel: 'Countermeasures & AI Rx',
+      icon: Dumbbell,
+      phase: 'Exercise RX',
+    },
+    {
       id: 'mental',
+      path: '/mental-wellness',
       label: 'Mental Wellness',
       sublabel: '3D Avatar & AI Therapist',
       icon: Heart,
@@ -57,6 +70,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'body3d',
+      path: '/3d-body',
       label: 'Interactive 3D Body',
       sublabel: 'Hologram Symptom Mapping',
       icon: Stethoscope,
@@ -64,6 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'twin',
+      path: '/digital-twin',
       label: 'Digital Twin Simulator',
       sublabel: 'Biomechanical Risk Engine',
       icon: Cpu,
@@ -71,6 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'timeline',
+      path: '/timeline',
       label: 'Medical Timeline',
       sublabel: 'Chronology & Flight Audit',
       icon: Clock,
@@ -78,6 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'comms',
+      path: '/comms',
       label: 'Comms & Telemedicine',
       sublabel: 'Telemedicine Uplink Hub',
       icon: Radio,
@@ -85,6 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'reports',
+      path: '/reports',
       label: 'Medical Reports',
       sublabel: 'NASA Clearance Dossier',
       icon: FileText,
@@ -92,6 +110,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'environment',
+      path: '/environment',
       label: 'Mission Environment',
       sublabel: 'ECLSS & NASA DONKI',
       icon: Gauge,
@@ -110,58 +129,58 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <nav className="mt-3 space-y-2">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isCurrent = item.id === currentTab;
 
               return (
-                <button
-                  type="button"
+                <NavLink
                   key={item.id}
-                  onClick={() => onSelectTab?.(item.id)}
-                  className={`w-full text-left rounded-xl p-3.5 transition-all duration-200 border cursor-pointer ${
-                    isCurrent
-                      ? 'bg-[#00E5FF]/15 border-[#00E5FF]/60 text-white shadow-[0_0_22px_rgba(0,229,255,0.3)]'
-                      : 'border-slate-800/80 bg-slate-900/30 text-slate-300 hover:text-white hover:bg-slate-800/70 hover:border-slate-700'
-                  }`}
+                  to={item.path}
                   title={item.label}
+                  className={({ isActive }) =>
+                    `block w-full text-left rounded-xl p-3.5 transition-all duration-200 border cursor-pointer ${
+                      isActive
+                        ? 'bg-[#00E5FF]/15 border-[#00E5FF]/60 text-white shadow-[0_0_22px_rgba(0,229,255,0.3)]'
+                        : 'border-slate-800/80 bg-slate-900/30 text-slate-300 hover:text-white hover:bg-slate-800/70 hover:border-slate-700'
+                    }`
+                  }
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`p-2 rounded-lg ${
-                          isCurrent
-                            ? 'bg-[#00E5FF] text-black shadow-[0_0_12px_#00E5FF]'
-                            : 'bg-slate-800 text-slate-300'
-                        }`}
-                      >
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-bold tracking-wide font-['Chakra_Petch',sans-serif] flex items-center gap-1.5 text-white">
-                          {item.label}
+                  {({ isActive }) => (
+                    <>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`p-2 rounded-lg ${
+                              isActive
+                                ? 'bg-[#00E5FF] text-black shadow-[0_0_12px_#00E5FF]'
+                                : 'bg-slate-800 text-slate-300'
+                            }`}
+                          >
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold tracking-wide font-['Chakra_Petch',sans-serif] flex items-center gap-1.5 text-white">
+                              {item.label}
+                            </div>
+                            <div className="text-xs text-slate-300 font-sans line-clamp-1 mt-0.5">
+                              {item.sublabel}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-xs text-slate-300 font-sans line-clamp-1 mt-0.5">
-                          {item.sublabel}
-                        </div>
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="mt-2.5 flex items-center justify-between text-xs font-mono">
-                    <span
-                      className={
-                        isCurrent ? 'text-[#00E5FF] font-bold' : 'text-slate-400'
-                      }
-                    >
-                      {item.phase}
-                    </span>
-                    {isCurrent && (
-                      <span className="inline-flex items-center gap-1.5 text-[#10b981] font-bold">
-                        <span className="w-2 h-2 rounded-full bg-[#10b981] animate-ping" />
-                        ENGAGED
-                      </span>
-                    )}
-                  </div>
-                </button>
+                      <div className="mt-2.5 flex items-center justify-between text-xs font-mono">
+                        <span className={isActive ? 'text-[#00E5FF] font-bold' : 'text-slate-400'}>
+                          {item.phase}
+                        </span>
+                        {isActive && (
+                          <span className="inline-flex items-center gap-1.5 text-[#10b981] font-bold">
+                            <span className="w-2 h-2 rounded-full bg-[#10b981] animate-ping" />
+                            ENGAGED
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </NavLink>
               );
             })}
           </nav>
@@ -211,6 +230,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="text-slate-300">CALLSIGN:</span>
               <span className="font-black uppercase tracking-wider glow-text-cyan">{callsign}</span>
             </div>
+            {role && (
+              <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400 mt-0.5">
+                SESSION: {role}
+              </div>
+            )}
           </div>
         </div>
       </div>

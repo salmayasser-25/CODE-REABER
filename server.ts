@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import type { Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import Groq from 'groq-sdk';
 import { UpdateProfileSchema } from './src/types/astronaut.ts';
 import type { ExerciseCategory, FitnessAIAnalysis } from './src/types/astronaut.ts';
@@ -161,7 +161,7 @@ app.post('/api/profile/reset', (_req: Request, res: Response) => {
       role: 'Mission Specialist / Payload Bio-Engineer',
       missionId: 'EXP-74 / ARTEMIS BIO-LAB',
       healthStatus: 'nominal',
-      photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+      photoUrl: '/images/astronaut_salma_portrait.jpg',
       totalEvaHours: 28.5,
       bloodType: 'O-Positive (O+)',
       spineElongation: 4.2,
@@ -519,13 +519,16 @@ Highlight the correlation between elevated heart rate and the reduced ${sleep} h
     if (ai) {
       try {
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('AI request timeout')), 4000)
+          setTimeout(() => reject(new Error('AI request timeout')), 8000)
         );
 
         const response: any = await Promise.race([
           ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-4-hydrogen',
             contents: prompt,
+            config: {
+              thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            },
           }),
           timeoutPromise,
         ]);
@@ -535,7 +538,7 @@ Highlight the correlation between elevated heart rate and the reduced ${sleep} h
           return res.json({
             success: true,
             insight: text,
-            source: 'gemini-2.5-flash',
+            source: 'gemini-4-hydrogen',
             timestamp: new Date().toISOString(),
           });
         }
@@ -698,18 +701,21 @@ const handleAstroChat = async (req: Request, res: Response) => {
 
         const response: any = await Promise.race([
           gemini.models.generateContent({
-            model: 'gemini-3.8-flash',
+            model: 'gemini-4-hydrogen',
             contents: geminiContents,
-            config: { systemInstruction: systemPrompt },
+            config: {
+              systemInstruction: systemPrompt,
+              thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            },
           }),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('AI request timeout')), 5000)),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('AI request timeout')), 8000)),
         ]);
         const text = response.text?.trim();
         if (text) {
           return res.json({
             success: true,
             reply: text,
-            source: 'gemini-3.8-flash',
+            source: 'gemini-4-hydrogen',
           });
         }
       } catch (geminiError: any) {
@@ -747,135 +753,6 @@ const handleAstroChat = async (req: Request, res: Response) => {
 
 app.post('/api/chat/astro', handleAstroChat);
 app.post('/api/ai/chat', handleAstroChat);
-
-// --- Digital Twin Risk Simulator Endpoint ---
-app.post('/api/simulator/run', async (req: Request, res: Response) => {
-  try {
-    const { actionId = 'ared-squat', spineElongation = 4.2, weightKg = 120, pressurePsi = 4.3, treadmillSpeedKmh = 14.5 } = req.body || {};
-
-    let simulationResult: any;
-
-    if (actionId === 'ared-squat') {
-      const peakForceN = Math.round(weightKg * 9.81 * 2.35); // Dynamic microgravity resistance multiplier
-      const safetyLimitN = 2100;
-      const overloadPct = Math.round(((peakForceN - safetyLimitN) / safetyLimitN) * 100);
-      const isCritical = peakForceN > safetyLimitN;
-
-      simulationResult = {
-        actionId: 'ared-squat',
-        actionTitle: 'ARED Barbell Squat (Heavy Axial Load)',
-        riskLevel: isCritical ? 'CRITICAL' : 'MODERATE',
-        riskScore: isCritical ? 92 : 64,
-        peakForceN,
-        safetyLimitN,
-        overloadPercentage: Math.max(0, overloadPct),
-        stressCoordinates: [0, 0.48, -0.06], // Lumbar L4-L5 region
-        affectedSystems: [
-          'Lumbar Spine (L4-L5 / L5-S1)',
-          'Intervertebral Discs',
-          'Paraspinal Musculature',
-          'Sacroiliac Joint'
-        ],
-        predictedConsequence: `88% probability of acute disc herniation and annular tearing. Axial compressive force (${peakForceN} N) exceeds the microgravity-attenuated annulus fibrosus yield point (${safetyLimitN} N) under current spinal elongation (+${spineElongation} cm).`,
-        recommendation: 'ABORT ACTION IMMEDIATELY. Transition to CEVIS Cycle Ergometer or ARED Belt Squat (unloaded axial spine). Administer prophylactic ice & non-steroidal decompression protocol.',
-        aiRationale: `Based on your current Spine Elongation (+${spineElongation} cm) and reported lumbar soreness, executing a ${weightKg}kg axial load will exceed the safe disc pressure threshold. This is a deterministic safety violation.`,
-        safeAlternative: 'CEVIS Cycle Ergometer (60 min @ 165W) or Unloaded Resistance Bands'
-      };
-    } else if (actionId === 'eva-suit') {
-      const deltaP = Math.max(0.1, Number((pressurePsi - 4.3).toFixed(2)));
-      const jointTorqueNm = Math.round(48 + deltaP * 22);
-      const safeTorqueNm = 45;
-      const isCritical = jointTorqueNm > safeTorqueNm;
-
-      simulationResult = {
-        actionId: 'eva-suit',
-        actionTitle: 'EVA Suit Donning (High Pressure Differential)',
-        riskLevel: isCritical ? 'HIGH' : 'MODERATE',
-        riskScore: isCritical ? 78 : 45,
-        peakForceN: jointTorqueNm * 10,
-        safetyLimitN: safeTorqueNm * 10,
-        overloadPercentage: Math.round(((jointTorqueNm - safeTorqueNm) / safeTorqueNm) * 100),
-        stressCoordinates: [0, 0.88, 0.08], // Glenohumeral / Acromioclavicular shoulders
-        affectedSystems: [
-          'Glenohumeral Joint Capsule',
-          'Acromioclavicular Ligament',
-          'Rotator Cuff (Supraspinatus)',
-          'Pectoralis Major Insertion'
-        ],
-        predictedConsequence: `67% risk of supraspinatus impingement and subacromial bursitis during suit pressurization at ${pressurePsi} psi. Stiff planar shoulder bearings generate excessive abduction torque against microgravity-lengthened torso.`,
-        recommendation: 'PRE-DONNING MOBILITY MANDATED. Perform 10 min scapular retraction protocol. Request crewmate assistance for Upper Torso Assembly (HUT) ingress to prevent shoulder hyperabduction.',
-        aiRationale: `Suit sizing calibration assumes nominal Earth spine geometry. Current +${spineElongation}cm elongation shifts shoulder pivot centers 18mm superiorly into the rigid fiberglass shell rim.`,
-        safeAlternative: 'Assisted HUT Ingress with 3.8 psi intermediate depress step'
-      };
-    } else {
-      // treadmill
-      const peakHrBpm = Math.round(155 + (treadmillSpeedKmh - 10) * 8.5);
-      const safeMaxHr = 168;
-      const isCritical = peakHrBpm > safeMaxHr;
-
-      simulationResult = {
-        actionId: 'treadmill',
-        actionTitle: 'High-Intensity Treadmill (Cardiovascular Stress)',
-        riskLevel: isCritical ? 'CRITICAL' : 'MODERATE',
-        riskScore: isCritical ? 84 : 52,
-        peakForceN: peakHrBpm,
-        safetyLimitN: safeMaxHr,
-        overloadPercentage: Math.round(Math.max(0, ((peakHrBpm - safeMaxHr) / safeMaxHr) * 100)),
-        stressCoordinates: [-0.08, 0.82, 0.14], // Thoracic / Cardiac region
-        affectedSystems: [
-          'Left Ventricle Myocardium',
-          'Baroreceptor Reflex Loops',
-          'Pulmonary Capillary Bed',
-          'Calf Soleus Venous Return'
-        ],
-        predictedConsequence: `Projected cardiac workload reaches ${peakHrBpm} BPM. Cephalic fluid shift elevates central venous pressure while stroke volume remains reduced by 14% from microgravity deconditioning.`,
-        recommendation: 'CAP VELOCITY AT 11.0 KM/H. Limit high-intensity interval bursts to < 90 seconds. Ensure T2 harness bungee load does not exceed 70% body weight equivalent.',
-        aiRationale: `Cardiovascular telemetry from Flight Day 84 exhibits 5.2h sleep debt and mild orthostatic deconditioning. High cardiac output demands risk subendocardial ischemia and lightheadedness.`,
-        safeAlternative: 'Interval Ergometer Protocol (3 min high / 2 min recovery x 5)'
-      };
-    }
-
-    // Try Groq or Gemini to personalize AI explanation if keys are available
-    try {
-      const groq = getGroqClient();
-      if (groq) {
-        const activeModel = await resolveGroqModel(groq);
-        const completion = await groq.chat.completions.create({
-          messages: [
-            {
-              role: 'system',
-              content: 'You are an aerospace biomechanics flight surgeon. In 2 concise, highly authoritative sentences, explain why the simulated astronaut action poses physiological danger under microgravity.'
-            },
-            {
-              role: 'user',
-              content: `Astronaut: Dr. Salma Johnson, Spine Elongation: +${spineElongation}cm, Action: ${simulationResult.actionTitle}, Parameter: ${actionId === 'ared-squat' ? weightKg + 'kg barbell' : actionId === 'eva-suit' ? pressurePsi + ' psi' : treadmillSpeedKmh + ' km/h'}. Risk level: ${simulationResult.riskLevel}.`
-            }
-          ],
-          model: activeModel,
-          max_tokens: 150,
-          temperature: 0.6,
-        });
-        const dynamicExplanation = completion.choices[0]?.message?.content?.trim();
-        if (dynamicExplanation) {
-          simulationResult.aiRationale = dynamicExplanation;
-        }
-      }
-    } catch (_err) {
-      // Use rock-solid deterministic clinical rationale
-    }
-
-    res.json({
-      success: true,
-      simulation: simulationResult,
-    });
-  } catch (error: any) {
-    console.error('[Simulator Server Error]:', error?.message);
-    res.status(500).json({
-      success: false,
-      error: 'Digital Twin simulation failed to compute.',
-    });
-  }
-});
 
 
 // ─── Fitness / Exercise Endpoints ───────────────────────────────────────────
@@ -978,8 +855,12 @@ Based on the astronaut's complete profile, vitals, symptoms, and conditions, gen
 
         const response: any = await Promise.race([
           ai.models.generateContent({
-            model: 'gemini-2.0-flash',
+            model: 'gemini-4-hydrogen',
             contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            },
           }),
           timeoutPromise,
         ]);
@@ -993,7 +874,7 @@ Based on the astronaut's complete profile, vitals, symptoms, and conditions, gen
             return res.json({
               success: true,
               data: analysis,
-              source: 'gemini-2.0-flash',
+              source: 'gemini-4-hydrogen',
             });
           } catch {
             // If JSON parsing fails, return as raw assessment
@@ -1007,7 +888,7 @@ Based on the astronaut's complete profile, vitals, symptoms, and conditions, gen
                 cautions: ['AI response was non-structured. Review overall assessment manually.'],
                 timestamp: new Date().toISOString(),
               } as FitnessAIAnalysis,
-              source: 'gemini-2.0-flash-raw',
+              source: 'gemini-4-hydrogen-raw',
             });
           }
         }
@@ -1125,9 +1006,12 @@ Instructions:
 
         const response: any = await Promise.race([
           ai.models.generateContent({
-            model: 'gemini-2.0-flash',
+            model: 'gemini-4-hydrogen',
             contents,
-            config: { systemInstruction: systemPrompt },
+            config: {
+              systemInstruction: systemPrompt,
+              thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            },
           }),
           timeoutPromise,
         ]);
@@ -1137,7 +1021,7 @@ Instructions:
           return res.json({
             success: true,
             reply: text,
-            source: 'gemini-2.0-flash',
+            source: 'gemini-4-hydrogen',
           });
         }
       } catch (geminiError: any) {

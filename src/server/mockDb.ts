@@ -18,7 +18,7 @@ export let currentAstronautProfile: AstronautProfile = {
   role: 'Mission Specialist / Payload Bio-Engineer',
   missionId: 'EXP-74 / ARTEMIS BIO-LAB',
   healthStatus: 'nominal',
-  photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+  photoUrl: '/images/astronaut_salma_portrait.jpg',
   totalEvaHours: 28.5,
   bloodType: 'O-Positive (O+)',
   spineElongation: 4.2, // +4.2 cm microgravity spinal adaptation delta

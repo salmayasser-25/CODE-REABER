@@ -38,7 +38,7 @@ export const VitalSignsPage: React.FC<VitalSignsPageProps> = ({ profile, onNavig
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [aiInsight, setAiInsight] = useState<string>('');
-  const [insightSource, setInsightSource] = useState<string>('gemini-3.8-flash');
+  const [insightSource, setInsightSource] = useState<string>('gemini-4-hydrogen');
   const [selectedRange, setSelectedRange] = useState<'7D' | '24H'>('7D');
   const [isSimulatingAlert, setIsSimulatingAlert] = useState<boolean>(true);
 
@@ -184,7 +184,7 @@ export const VitalSignsPage: React.FC<VitalSignsPageProps> = ({ profile, onNavig
 
       if (json?.success && json?.insight) {
         setAiInsight(json.insight);
-        setInsightSource(json.source || 'gemini-2.5-flash');
+        setInsightSource(json.source || 'gemini-4-hydrogen');
       }
     } catch (error) {
       console.warn('AI clinical insight endpoint unreachable, using local clinical matrix:', error);
@@ -636,7 +636,7 @@ export const VitalSignsPage: React.FC<VitalSignsPageProps> = ({ profile, onNavig
                   AI Clinical Insight
                 </h3>
                 <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-[#FF8C00]/20 border border-[#FF8C00]/50 text-[#FFB347]">
-                  {insightSource === 'gemini-3.8-flash' ? 'POWERED BY GEMINI 3.8 FLASH' : 'AEROSPACE CLINICAL ENGINE'}
+                  {insightSource.startsWith('gemini') ? 'POWERED BY GEMINI AI' : 'AEROSPACE CLINICAL ENGINE'}
                 </span>
               </div>
               <p className="text-xs font-sans text-slate-300 mt-0.5">

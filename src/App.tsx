@@ -1,32 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { SpaceBackground } from './components/SpaceBackground.js';
-import { TopNav } from './components/TopNav.js';
-import { Sidebar } from './components/Sidebar.js';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Layout } from './components/Layout.tsx';
+import { LoginScreen } from './components/LoginScreen.tsx';
 import { AstronautHeader } from './components/AstronautHeader.js';
 import { CrewDossierCard } from './components/CrewDossierCard.js';
 import { ClinicalAdaptationsCard } from './components/ClinicalAdaptationsCard.js';
 import { SurgeonLinkCard } from './components/SurgeonLinkCard.js';
-import { EditProfileModal } from './components/EditProfileModal.js';
-import { ClinicalContextModal } from './components/ClinicalContextModal.js';
-import { RoleModal } from './components/RoleModal.js';
 import { VitalSignsPage } from './components/VitalSignsPage.tsx';
 import { MentalWellnessPage } from './components/MentalWellnessPage.tsx';
 import { InteractiveBodyPage } from './components/InteractiveBodyPage.tsx';
 import { DailyCheckinPage } from './components/DailyCheckinPage.tsx';
+import { FitnessPage } from './components/FitnessPage.tsx';
 import { UnifiedTimelinePage } from './components/UnifiedTimelinePage.tsx';
 import { CommsHubPage } from './components/CommsHubPage.tsx';
 import { MedicalReportsPage } from './components/MedicalReportsPage.tsx';
 import { MissionEnvironmentPage } from './components/MissionEnvironmentPage.tsx';
 import { DigitalTwinPage } from './components/DigitalTwinPage.tsx';
+import { AuthProvider, useAuth } from './contexts/AuthContext.tsx';
 import { AstronautProfile, FlightSurgeon } from './types/astronaut.js';
-import { 
-  CheckCircle, 
-  AlertCircle, 
-  Sparkles, 
-  Sliders,
-  Edit3,
-  BookOpen
-} from 'lucide-react';
+import { Sliders, Edit3, BookOpen } from 'lucide-react';
 
 const DEFAULT_INITIAL_PROFILE: AstronautProfile = {
   id: 'ASTRO-74-SJ',
@@ -36,7 +28,7 @@ const DEFAULT_INITIAL_PROFILE: AstronautProfile = {
   role: 'Mission Specialist / Payload Bio-Engineer',
   missionId: 'EXP-74 / ARTEMIS BIO-LAB',
   healthStatus: 'nominal',
-  photoUrl: '/src/assets/images/astronaut_salma_portrait_1794328380973.jpg',
+  photoUrl: '/images/astronaut_salma_portrait.jpg',
   totalEvaHours: 28.5,
   bloodType: 'O-Positive (O+)',
   spineElongation: 4.2,
@@ -62,9 +54,49 @@ const DEFAULT_INITIAL_PROFILE: AstronautProfile = {
   updatedAt: new Date().toISOString(),
 };
 
-export default function App() {
+const TAB_TO_ROUTE: Record<string, string> = {
+  profile: '/profile',
+  vitals: '/vitals',
+  checkin: '/checkin',
+  fitness: '/fitness',
+  mental: '/mental-wellness',
+  'mental-wellness': '/mental-wellness',
+  body3d: '/3d-body',
+  symptoms: '/3d-body',
+  '3d-body': '/3d-body',
+  twin: '/digital-twin',
+  'digital-twin': '/digital-twin',
+  timeline: '/timeline',
+  comms: '/comms',
+  reports: '/reports',
+  environment: '/environment',
+};
+
+function RequireAuth({ children }: { children: React.ReactElement }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) {
+    return null;
+  }
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+}
+
+function LoginRoute() {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) {
+    return null;
+  }
+  if (isAuthenticated) {
+    return <Navigate to="/profile" replace />;
+  }
+  return <LoginScreen />;
+}
+
+function AppRoutes() {
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<AstronautProfile>(DEFAULT_INITIAL_PROFILE);
-  const [currentTab, setCurrentTab] = useState<string>('profile');
   const [isEditingInline, setIsEditingInline] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isContextModalOpen, setIsContextModalOpen] = useState<boolean>(false);
@@ -72,7 +104,6 @@ export default function App() {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  // Auto-dismissing toast notifications
   const triggerToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => {
@@ -80,7 +111,11 @@ export default function App() {
     }, 5000);
   };
 
-  // 1. Fetch astronaut profile from backend GET /api/profile
+  const navigateByTab = (tab: string) => {
+    const target = TAB_TO_ROUTE[tab] || (tab.startsWith('/') ? tab : `/${tab}`);
+    navigate(target);
+  };
+
   const loadProfile = async () => {
     try {
       const response = await fetch('/api/profile');
@@ -99,7 +134,6 @@ export default function App() {
     loadProfile();
   }, []);
 
-  // 2. Save profile updates via PATCH /api/profile
   const handleSaveProfile = async (updatesToSave?: Partial<AstronautProfile>) => {
     setIsSaving(true);
     const dataToSend = updatesToSave || profile;
@@ -119,7 +153,7 @@ export default function App() {
       } else {
         throw new Error(result.error || 'Server validation rejected updates');
       }
-    } catch (error: any) {
+    } catch (_error: any) {
       setProfile((prev) => ({ ...prev, ...(updatesToSave || {}) }));
       setIsEditingInline(false);
       triggerToast('Local changes updated (Offline fallback active)', 'info');
@@ -128,7 +162,6 @@ export default function App() {
     }
   };
 
-  // 3. Reset profile back to baseline
   const handleResetProfile = async () => {
     if (!window.confirm('Reset astronaut dossier back to Dr. Salma Johnson NASA baseline?')) {
       return;
@@ -146,14 +179,13 @@ export default function App() {
       }
       setIsEditingInline(false);
       triggerToast('Profile successfully reset to Expedition-74 baseline', 'info');
-    } catch (e) {
+    } catch (_e) {
       setProfile(DEFAULT_INITIAL_PROFILE);
       setIsEditingInline(false);
       triggerToast('Profile baseline reset locally', 'info');
     }
   };
 
-  // In-line field changes
   const handleFieldChange = (field: keyof AstronautProfile, value: any) => {
     setProfile((prev) => ({ ...prev, [field]: value }));
   };
@@ -207,265 +239,211 @@ export default function App() {
     triggerToast('New astronaut photo preview loaded', 'success');
   };
 
-  return (
-    <div
-      className="min-h-screen text-slate-100 relative selection:bg-[#00E5FF]/30 selection:text-[#00E5FF]"
-      style={{
-        backgroundImage: "url('/assets/aistudio/3d-rendering-dark-earth-space_2c80c4c8.jpg')",
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundAttachment: 'fixed',
-        backgroundRepeat: 'no-repeat',
-        backgroundColor: '#050810',
-      }}
-    >
-      {/* Transparent Dark Overlay (rgba(5, 8, 16, 0.35)) to showcase the vibrant Earth and glowing Nebula */}
-      <div
-        className="fixed inset-0 pointer-events-none z-0 transition-opacity duration-300"
-        style={{ backgroundColor: 'rgba(5, 8, 16, 0.35)' }}
+  const profilePageContent = (
+    <>
+      {isEditingInline && (
+        <div className="p-4 rounded-xl bg-[#FF8C00]/20 border border-[#FF8C00]/50 text-[#FFB347] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-[0_0_25px_rgba(255,140,0,0.3)] backdrop-blur-md">
+          <div className="flex items-center gap-3 text-sm font-mono">
+            <Sliders className="w-5 h-5 text-[#FF8C00] shrink-0" />
+            <span className="text-white">
+              <strong className="text-[#FF8C00]">INLINE EDIT MODE ENGAGED:</strong> Adjust sliders, type new values, or add allergies directly.
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => handleSaveProfile()}
+              disabled={isSaving}
+              className="px-4 py-2 rounded-lg bg-[#FF8C00] text-black font-mono font-extrabold text-xs sm:text-sm hover:bg-[#FF8C00]/90 transition-colors shadow-md cursor-pointer"
+            >
+              {isSaving ? 'SAVING...' : 'SAVE CHANGES'}
+            </button>
+            <button
+              onClick={() => setIsEditingInline(false)}
+              className="px-4 py-2 rounded-lg bg-slate-900 text-slate-200 font-mono text-xs sm:text-sm hover:bg-slate-800 transition-colors border border-slate-700 cursor-pointer"
+            >
+              CANCEL
+            </button>
+          </div>
+        </div>
+      )}
+
+      <AstronautHeader
+        profile={profile}
+        isEditing={isEditingInline}
+        onToggleEdit={() => setIsEditingInline((prev) => !prev)}
+        onSave={() => handleSaveProfile()}
+        onReset={handleResetProfile}
+        onPhotoUpload={handlePhotoUpload}
+        isSaving={isSaving}
       />
 
-      {/* Dynamic Animated Canvas Space Background with Stars & Shooting Stars */}
-      <SpaceBackground />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-2 text-xs sm:text-sm font-mono text-slate-200">
+        <div className="flex items-center gap-3">
+          <span className="text-[#00E5FF] font-bold">PAGE: ASTRONAUT PROFILE (PHASE 1)</span>
+          <span className="text-slate-500">·</span>
+          <span className="text-slate-200">TELEMETRY: 1-HZ REALTIME</span>
+          <span className="text-slate-500 hidden md:inline">·</span>
+          <span className="text-slate-300 hidden md:inline">
+            LAST SYNC: {new Date(profile.updatedAt || Date.now()).toLocaleTimeString()}
+          </span>
+        </div>
 
-      {/* Main Container */}
-      <div className="relative z-10 flex flex-col min-h-screen">
-        {/* Top Navigation Bar with Simulated Data Alert & Role Switcher */}
-        <TopNav
-          isEditing={isEditingInline}
-          onToggleEdit={() => setIsEditingInline((prev) => !prev)}
-          onOpenRoleModal={() => setIsRoleModalOpen(true)}
-          currentTab={currentTab}
-          onSelectTab={setCurrentTab}
-        />
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsContextModalOpen(true)}
+            className="px-3.5 py-1.5 rounded-lg bg-[#00E5FF]/15 hover:bg-[#00E5FF]/25 border border-[#00E5FF]/45 text-[#00E5FF] flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(0,229,255,0.2)] text-xs font-bold cursor-pointer"
+          >
+            <BookOpen className="w-4 h-4 text-[#00E5FF]" />
+            <span>Clinical Briefing</span>
+          </button>
 
-        {/* Content Layout: Left Sidebar + Main Content */}
-        <div className="flex-1 flex flex-row">
-          <Sidebar
-            currentTab={currentTab}
-            onSelectTab={setCurrentTab}
-            astronautName={profile.name}
-            callsign={profile.callsign}
-          />
-
-          <main className="flex-1 px-4 sm:px-6 lg:px-8 py-7 max-w-7xl mx-auto w-full space-y-7">
-            {/* View 1: Vital Signs & Gemini AI Clinical Insight */}
-            {currentTab === 'vitals' && (
-              <VitalSignsPage 
-                profile={profile} 
-                onNavigateToCheckin={() => setCurrentTab('checkin')} 
-              />
-            )}
-
-            {/* View 2: Daily Health Check-in */}
-            {currentTab === 'checkin' && (
-              <DailyCheckinPage 
-                profile={profile} 
-                onNavigateToTimeline={() => setCurrentTab('timeline')} 
-              />
-            )}
-
-            {/* View 3: Mental Wellness & 3D Avatar Companion */}
-            {currentTab === 'mental' && (
-              <MentalWellnessPage profile={profile} />
-            )}
-
-            {/* View 4: Interactive 3D Body Symptom Mapping */}
-            {(currentTab === 'body3d' || currentTab === 'symptoms') && (
-              <InteractiveBodyPage profile={profile} />
-            )}
-
-            {/* View 5: Predictive Digital Twin Risk Simulator (WOW FACTOR) */}
-            {(currentTab === 'twin' || currentTab === 'digital-twin') && (
-              <DigitalTwinPage
-                profile={profile}
-                onSendToast={triggerToast}
-                onNavigateToTab={setCurrentTab}
-              />
-            )}
-
-            {/* View 6: Unified Medical & Telemetry Timeline */}
-            {currentTab === 'timeline' && (
-              <UnifiedTimelinePage 
-                profile={profile} 
-                onNavigateToTab={setCurrentTab} 
-              />
-            )}
-
-            {/* View 6: Community & Comms Hub (Telemedicine Uplink) */}
-            {currentTab === 'comms' && (
-              <CommsHubPage 
-                profile={profile} 
-                onSendToast={triggerToast} 
-              />
-            )}
-
-            {/* View 7: Medical Reports & Flight Clearance Dossier */}
-            {currentTab === 'reports' && (
-              <MedicalReportsPage 
-                profile={profile} 
-                onSendToast={triggerToast} 
-              />
-            )}
-
-            {/* View 8: Spacecraft Life Support & ECLSS Telemetry (NASA DONKI) */}
-            {currentTab === 'environment' && (
-              <MissionEnvironmentPage 
-                profile={profile} 
-                onSendToast={triggerToast} 
-              />
-            )}
-
-            {/* View 9: Astronaut Profile Page (Only ONE Profile Route) */}
-            {currentTab === 'profile' && (
-              <>
-                {/* Inline Edit Mode Warning Strip */}
-                {isEditingInline && (
-                  <div className="p-4 rounded-xl bg-[#FF8C00]/20 border border-[#FF8C00]/50 text-[#FFB347] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-[0_0_25px_rgba(255,140,0,0.3)] backdrop-blur-md">
-                    <div className="flex items-center gap-3 text-sm font-mono">
-                      <Sliders className="w-5 h-5 text-[#FF8C00] shrink-0" />
-                      <span className="text-white">
-                        <strong className="text-[#FF8C00]">INLINE EDIT MODE ENGAGED:</strong> Adjust sliders, type new values, or add allergies directly.
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => handleSaveProfile()}
-                        disabled={isSaving}
-                        className="px-4 py-2 rounded-lg bg-[#FF8C00] text-black font-mono font-extrabold text-xs sm:text-sm hover:bg-[#FF8C00]/90 transition-colors shadow-md"
-                      >
-                        {isSaving ? 'SAVING...' : 'SAVE CHANGES'}
-                      </button>
-                      <button
-                        onClick={() => setIsEditingInline(false)}
-                        className="px-4 py-2 rounded-lg bg-slate-900 text-slate-200 font-mono text-xs sm:text-sm hover:bg-slate-800 transition-colors border border-slate-700"
-                      >
-                        CANCEL
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Astronaut Header Section with High-Contrast Typography & Glow */}
-                <AstronautHeader
-                  profile={profile}
-                  isEditing={isEditingInline}
-                  onToggleEdit={() => setIsEditingInline((prev) => !prev)}
-                  onSave={() => handleSaveProfile()}
-                  onReset={handleResetProfile}
-                  onPhotoUpload={handlePhotoUpload}
-                  isSaving={isSaving}
-                />
-
-                {/* Sub-toolbar for quick modal launch and status metadata */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-2 text-xs sm:text-sm font-mono text-slate-200">
-                  <div className="flex items-center gap-3">
-                    <span className="text-[#00E5FF] font-bold">PAGE: ASTRONAUT PROFILE (PHASE 1)</span>
-                    <span className="text-slate-500">·</span>
-                    <span className="text-slate-200">TELEMETRY: 1-HZ REALTIME</span>
-                    <span className="text-slate-500 hidden md:inline">·</span>
-                    <span className="text-slate-300 hidden md:inline">LAST SYNC: {new Date(profile.updatedAt || Date.now()).toLocaleTimeString()}</span>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setIsContextModalOpen(true)}
-                      className="px-3.5 py-1.5 rounded-lg bg-[#00E5FF]/15 hover:bg-[#00E5FF]/25 border border-[#00E5FF]/45 text-[#00E5FF] flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(0,229,255,0.2)] text-xs font-bold"
-                    >
-                      <BookOpen className="w-4 h-4 text-[#00E5FF]" />
-                      <span>Clinical Briefing</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsModalOpen(true)}
-                      className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-[#00E5FF]/45 text-white flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(0,229,255,0.2)] text-xs font-bold"
-                    >
-                      <Edit3 className="w-4 h-4 text-[#00E5FF]" />
-                      <span>Full Edit Dialog</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Section 1: Crew Dossier Card */}
-                <CrewDossierCard
-                  profile={profile}
-                  isEditing={isEditingInline}
-                  onChange={handleFieldChange}
-                />
-
-                {/* Section 2: Clinical Conditions & Adaptations (Spine Elongation, Blood, Allergies) */}
-                <ClinicalAdaptationsCard
-                  profile={profile}
-                  isEditing={isEditingInline}
-                  onSpineChange={(val) => handleFieldChange('spineElongation', val)}
-                  onBloodTypeChange={(val) => handleFieldChange('bloodType', val)}
-                  onAddAllergy={handleAddAllergy}
-                  onRemoveAllergy={handleRemoveAllergy}
-                  onAddCondition={handleAddCondition}
-                  onRemoveCondition={handleRemoveCondition}
-                  onOpenContextModal={() => setIsContextModalOpen(true)}
-                />
-
-                {/* Section 3: Ground Flight Surgeon Link (with Send Bio-metric Ping action) */}
-                <SurgeonLinkCard
-                  surgeon={profile.assignedSurgeon}
-                  isEditing={isEditingInline}
-                  onSurgeonChange={handleSurgeonChange}
-                  onSendPingToast={(msg) => triggerToast(msg, 'success')}
-                  onOpenComms={() => setCurrentTab('comms')}
-                />
-              </>
-            )}
-
-            {/* Footer with NASA Space Apps Challenge Accreditation */}
-            <footer className="pt-8 pb-12 border-t border-slate-800/80 text-xs sm:text-sm font-mono text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-2.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#00E5FF] shadow-[0_0_10px_#00E5FF]" />
-                <span className="text-white font-bold">ASTROCARE // NASA SPACE APPS CHALLENGE</span>
-                <span>— Phase 1: Astronaut Health Foundation</span>
-              </div>
-              <div className="flex items-center gap-4 text-slate-300">
-                <span className="text-[#FF8C00] font-semibold">SIMULATED DEMONSTRATION DATA</span>
-                <span>·</span>
-                <span className="text-white">JSC FLIGHT MEDICINE REGISTRY</span>
-              </div>
-            </footer>
-          </main>
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(true)}
+            className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-[#00E5FF]/45 text-white flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(0,229,255,0.2)] text-xs font-bold cursor-pointer"
+          >
+            <Edit3 className="w-4 h-4 text-[#00E5FF]" />
+            <span>Full Edit Dialog</span>
+          </button>
         </div>
       </div>
 
-      {/* Full Edit Profile Dialog */}
-      <EditProfileModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+      <CrewDossierCard
         profile={profile}
-        onSave={handleSaveProfile}
+        isEditing={isEditingInline}
+        onChange={handleFieldChange}
       />
 
-      {/* Clinical Context Medical Explanation Modal (Requirement 4) */}
-      <ClinicalContextModal
-        isOpen={isContextModalOpen}
-        onClose={() => setIsContextModalOpen(false)}
-        spineElongation={profile.spineElongation}
+      <ClinicalAdaptationsCard
+        profile={profile}
+        isEditing={isEditingInline}
+        onSpineChange={(val) => handleFieldChange('spineElongation', val)}
+        onBloodTypeChange={(val) => handleFieldChange('bloodType', val)}
+        onAddAllergy={handleAddAllergy}
+        onRemoveAllergy={handleRemoveAllergy}
+        onAddCondition={handleAddCondition}
+        onRemoveCondition={handleRemoveCondition}
+        onOpenContextModal={() => setIsContextModalOpen(true)}
       />
 
-      {/* Role-Based Access Placeholder Modal (Requirement 7) */}
-      <RoleModal
-        isOpen={isRoleModalOpen}
-        onClose={() => setIsRoleModalOpen(false)}
+      <SurgeonLinkCard
+        surgeon={profile.assignedSurgeon}
+        isEditing={isEditingInline}
+        onSurgeonChange={handleSurgeonChange}
+        onSendPingToast={(msg) => triggerToast(msg, 'success')}
+        onOpenComms={() => navigate('/comms')}
       />
+    </>
+  );
 
-      {/* Floating Sci-Fi HUD Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-xl bg-[#080e22]/95 border-2 border-[#00E5FF]/60 text-white shadow-[0_0_35px_rgba(0,229,255,0.45)] backdrop-blur-xl font-mono text-xs sm:text-sm font-semibold animate-in fade-in slide-in-from-bottom-3 duration-200">
-          {toastMessage.type === 'success' && <CheckCircle className="w-5 h-5 text-[#10b981] shrink-0" />}
-          {toastMessage.type === 'error' && <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />}
-          {toastMessage.type === 'info' && <Sparkles className="w-5 h-5 text-[#00E5FF] shrink-0" />}
-          <span>{toastMessage.text}</span>
-        </div>
-      )}
-    </div>
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginRoute />} />
+
+      <Route
+        element={
+          <RequireAuth>
+            <Layout
+              profile={profile}
+              isEditingInline={isEditingInline}
+              onToggleEdit={() => setIsEditingInline((prev) => !prev)}
+              onSaveProfile={handleSaveProfile}
+              isModalOpen={isModalOpen}
+              onCloseModal={() => setIsModalOpen(false)}
+              isContextModalOpen={isContextModalOpen}
+              onCloseContextModal={() => setIsContextModalOpen(false)}
+              isRoleModalOpen={isRoleModalOpen}
+              onOpenRoleModal={() => setIsRoleModalOpen(true)}
+              onCloseRoleModal={() => setIsRoleModalOpen(false)}
+              toastMessage={toastMessage}
+            />
+          </RequireAuth>
+        }
+      >
+        <Route path="/" element={<Navigate to="/profile" replace />} />
+        <Route path="/profile" element={profilePageContent} />
+        <Route
+          path="/vitals"
+          element={
+            <VitalSignsPage
+              profile={profile}
+              onNavigateToCheckin={() => navigate('/checkin')}
+            />
+          }
+        />
+        <Route
+          path="/checkin"
+          element={
+            <DailyCheckinPage
+              profile={profile}
+              onNavigateToTimeline={() => navigate('/timeline')}
+            />
+          }
+        />
+        <Route path="/fitness" element={<FitnessPage profile={profile} />} />
+        <Route path="/mental-wellness" element={<MentalWellnessPage profile={profile} />} />
+        <Route path="/3d-body" element={<InteractiveBodyPage profile={profile} />} />
+        <Route path="/symptoms" element={<Navigate to="/3d-body" replace />} />
+        <Route
+          path="/digital-twin"
+          element={
+            <DigitalTwinPage
+              profile={profile}
+              onSendToast={triggerToast}
+              onNavigateToTab={navigateByTab}
+            />
+          }
+        />
+        <Route path="/twin" element={<Navigate to="/digital-twin" replace />} />
+        <Route
+          path="/timeline"
+          element={
+            <UnifiedTimelinePage
+              profile={profile}
+              onNavigateToTab={navigateByTab}
+            />
+          }
+        />
+        <Route
+          path="/comms"
+          element={
+            <CommsHubPage
+              profile={profile}
+              onSendToast={triggerToast}
+            />
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <MedicalReportsPage
+              profile={profile}
+              onSendToast={triggerToast}
+            />
+          }
+        />
+        <Route
+          path="/environment"
+          element={
+            <MissionEnvironmentPage
+              profile={profile}
+              onSendToast={triggerToast}
+            />
+          }
+        />
+        <Route path="*" element={<Navigate to="/profile" replace />} />
+      </Route>
+    </Routes>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
