@@ -20,17 +20,11 @@ import {
 } from 'lucide-react';
 import { ChatMessage, AstronautProfile } from '../types/astronaut.ts';
 
-const AVATAR_MODEL_URL = '/models/corpus_mira_space_marine_bust.glb';
-
-const registerLegacyGltfExtensions = (loader: any) => {
-  if (loader && typeof loader.register === 'function') {
-    loader.register(() => ({ name: 'KHR_materials_pbrSpecularGlossiness' }));
-  }
-};
+const AVATAR_MODEL_URL = '/models/astronaut_helmet.glb';
 
 // Pre-load the avatar model from local static storage
 try {
-  useGLTF.preload(AVATAR_MODEL_URL, true, true, registerLegacyGltfExtensions);
+  useGLTF.preload(AVATAR_MODEL_URL);
 } catch {
   // Preload safety catch
 }
@@ -58,25 +52,43 @@ class ModelErrorBoundary extends React.Component<
   }
 }
 
-// 3D Avatar component that renders the GLB bust and animates idle breathing
+// 3D Avatar component that renders the astronaut helmet GLB and animates idle floating
 function AvatarModel() {
-  const gltf = useGLTF(AVATAR_MODEL_URL, true, true, registerLegacyGltfExtensions);
+  const gltf = useGLTF(AVATAR_MODEL_URL);
   const meshRef = useRef<THREE.Group | null>(null);
 
-  // Idle gentle breathing & floating animation
+  // Compute exact scale and offset so the helmet sits directly at origin (0, 0, 0)
+  const { scale, offset } = React.useMemo(() => {
+    // Ensure all internal world matrices of the GLTF are computed
+    gltf.scene.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(gltf.scene);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z) || 1;
+    const s = 2.4 / maxDim;
+
+    return {
+      scale: s,
+      // When scaled by s, the model center is at center * s.
+      // Offsetting by -center * s moves the model center exactly to (0, 0, 0)
+      offset: center.multiplyScalar(-s),
+    };
+  }, [gltf.scene]);
+
+  // Gentle breathing float & subtle idle yaw
   useFrame((state) => {
     if (meshRef.current) {
       const time = state.clock.getElapsedTime();
-      // Gentle vertical breathing wave
-      meshRef.current.position.y = -1.6 + Math.sin(time * 1.5) * 0.04;
-      // Slight slow yaw turn
-      meshRef.current.rotation.y = Math.sin(time * 0.5) * 0.08;
+      meshRef.current.position.y = Math.sin(time * 1.4) * 0.05;
+      meshRef.current.rotation.y = Math.sin(time * 0.45) * 0.3;
     }
   });
 
   return (
-    <group ref={meshRef} position={[0, -1.6, 0]} scale={1.8}>
-      <primitive object={gltf.scene} />
+    <group ref={meshRef}>
+      <group position={offset} scale={scale}>
+        <primitive object={gltf.scene} />
+      </group>
     </group>
   );
 }
@@ -158,10 +170,11 @@ function AvatarViewer() {
         <OrbitControls 
           enableZoom={true} 
           enablePan={false} 
-          minDistance={2.5} 
+          minDistance={1.8} 
           maxDistance={5.5}
-          maxPolarAngle={Math.PI / 1.7}
-          minPolarAngle={Math.PI / 3}
+          target={[0, 0, 0]}
+          maxPolarAngle={Math.PI / 1.5}
+          minPolarAngle={Math.PI / 3.5}
         />
       </Canvas>
     </div>

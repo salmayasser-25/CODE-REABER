@@ -1,7 +1,9 @@
-import React, { useState, useRef, useEffect, Suspense } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, useGLTF, Html } from '@react-three/drei';
+import React, { useState, useRef, useEffect, Suspense, useMemo } from 'react';
+import { Canvas, useFrame, useLoader } from '@react-three/fiber';
+import { OrbitControls, Html } from '@react-three/drei';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { 
   Zap, 
   AlertTriangle, 
@@ -21,12 +23,7 @@ import {
 } from 'lucide-react';
 import { AstronautProfile } from '../types/astronaut.js';
 
-const BODY_MODEL_URL = '/models/body_superficial.app5m.glb';
-
-// Preload 3D model
-try {
-  useGLTF.preload(BODY_MODEL_URL);
-} catch {}
+const ECORCHE_MODEL_URL = '/models/ecorche-main/model/ecorche.meshopt.glb';
 
 interface SimulationResult {
   actionId: string;
@@ -129,34 +126,93 @@ function StressZoneMesh({
   );
 }
 
-// 3D Body Mesh with Cyber Hologram appearance
-function AnatomicalBodyModel({ activeResult }: { activeResult: SimulationResult | null }) {
-  const gltf = useGLTF(BODY_MODEL_URL);
-  const groupRef = useRef<THREE.Group | null>(null);
+// 3D Body Mesh with realistic Écorché anatomical appearance (identical to 3D Body Map) with stress feedback
+function AnatomicalBodyModel({ 
+  activeResult,
+  layerMode = 'all',
+  xrayOpacity = 0.85,
+}: { 
+  activeResult: SimulationResult | null;
+  layerMode?: 'all' | 'muscles' | 'skeleton';
+  xrayOpacity?: number;
+}) {
+  const gltf = useLoader(
+    GLTFLoader,
+    ECORCHE_MODEL_URL,
+    (loader) => {
+      (loader as any).setMeshoptDecoder(MeshoptDecoder);
+    }
+  );
 
-  // Apply holographic styling to all loaded meshes
+  const clonedScene = useMemo(() => gltf.scene.clone(true), [gltf.scene]);
+
+  // Apply anatomical styling identical to Interactive 3D Body Page (crimson muscle, ivory bone, stress highlights)
   useEffect(() => {
-    if (gltf.scene) {
-      gltf.scene.traverse((child: any) => {
+    if (clonedScene) {
+      clonedScene.traverse((child: any) => {
         if (child.isMesh) {
+          const ud = child.userData || {};
+          const tissue = (ud.tissue || '').toLowerCase();
+          const name = (ud.name || child.name || '').toLowerCase();
+          const meshLayer = (ud.layer || '').toLowerCase();
+          const isBone = tissue === 'bone' || tissue === 'cartilage' || tissue === 'tooth' || meshLayer.includes('skeleton');
+
+          // Layer Filter
+          if (layerMode === 'muscles' && isBone) {
+            child.visible = false;
+            return;
+          }
+          if (layerMode === 'skeleton' && !isBone) {
+            child.visible = false;
+            return;
+          }
+          child.visible = true;
+
+          // Check if structure is in simulated stress zone
+          let isAffected = false;
+          if (activeResult) {
+            if (activeResult.targetZone === 'lumbar' && (name.includes('vertebra') || name.includes('disc') || name.includes('multifidus') || name.includes('sacrum') || name.includes('erector') || name.includes('spine'))) {
+              isAffected = true;
+            } else if (activeResult.targetZone === 'shoulders' && (name.includes('supraspinatus') || name.includes('deltoid') || name.includes('clavicle') || name.includes('acromion') || name.includes('rotator') || name.includes('scapula'))) {
+              isAffected = true;
+            } else if (activeResult.targetZone === 'cardiovascular' && (name.includes('heart') || name.includes('rib') || name.includes('sternum') || name.includes('pectoralis') || name.includes('intercostal'))) {
+              isAffected = true;
+            }
+          }
+
+          // Same realistic color scheme as 3D Body Model:
+          // Muscle: #be123c (crimson), Bone: #e2d9c8 (ivory)
+          let color = isBone ? '#e2d9c8' : '#be123c';
+          let emissive = '#000000';
+          let emissiveIntensity = 0.0;
+          let opacity = isBone ? 0.95 : xrayOpacity;
+
+          if (isAffected) {
+            color = '#ef4444'; // Glowing stress red
+            emissive = '#dc2626';
+            emissiveIntensity = 0.85;
+            opacity = 1.0;
+          }
+
           child.material = new THREE.MeshStandardMaterial({
-            color: '#00E5FF',
-            metalness: 0.8,
-            roughness: 0.3,
-            emissive: '#042838',
-            emissiveIntensity: 0.4,
-            transparent: true,
-            opacity: 0.75,
-            wireframe: false,
+            color,
+            emissive,
+            emissiveIntensity,
+            roughness: isBone ? 0.65 : 0.45,
+            metalness: isBone ? 0.1 : 0.05,
+            transparent: opacity < 0.98,
+            opacity,
+            side: THREE.DoubleSide,
+            depthWrite: opacity > 0.65,
           });
         }
       });
     }
-  }, [gltf.scene]);
+  }, [clonedScene, activeResult, layerMode, xrayOpacity]);
 
   return (
-    <group ref={groupRef} position={[0, -0.9, 0]} scale={1.2}>
-      <primitive object={gltf.scene} />
+    <group position={[0, -0.9, 0]}>
+      <primitive object={clonedScene} />
       {/* Dynamic 3D visual stress reaction hotspot */}
       {activeResult && (
         <StressZoneMesh
@@ -172,39 +228,29 @@ function AnatomicalBodyModel({ activeResult }: { activeResult: SimulationResult 
 // Procedural Fallback if GLB model network is delayed
 function ProceduralBodyFallback({ activeResult }: { activeResult: SimulationResult | null }) {
   return (
-    <group position={[0, -0.4, 0]}>
+    <group position={[0, -0.9, 0]}>
       {/* Cranium */}
-      <mesh position={[0, 1.45, 0]}>
-        <sphereGeometry args={[0.22, 24, 24]} />
+      <mesh position={[0, 1.65, 0]}>
+        <sphereGeometry args={[0.16, 24, 24]} />
         <meshStandardMaterial color="#00E5FF" roughness={0.3} metalness={0.8} transparent opacity={0.65} />
       </mesh>
-      {/* Cervical */}
-      <mesh position={[0, 1.15, 0]}>
-        <cylinderGeometry args={[0.08, 0.09, 0.18, 16]} />
-        <meshStandardMaterial color="#00E5FF" roughness={0.3} metalness={0.8} transparent opacity={0.65} />
-      </mesh>
-      {/* Thorax */}
-      <mesh position={[0, 0.85, 0]}>
-        <boxGeometry args={[0.5, 0.42, 0.26]} />
+      {/* Torso */}
+      <mesh position={[0, 1.25, 0]}>
+        <boxGeometry args={[0.38, 0.48, 0.22]} />
         <meshStandardMaterial color="#00E5FF" roughness={0.3} metalness={0.8} transparent opacity={0.65} />
       </mesh>
       {/* Lumbar */}
-      <mesh position={[0, 0.48, 0]}>
-        <cylinderGeometry args={[0.18, 0.22, 0.32, 16]} />
-        <meshStandardMaterial color="#00E5FF" roughness={0.3} metalness={0.8} transparent opacity={0.65} />
-      </mesh>
-      {/* Pelvis */}
-      <mesh position={[0, 0.18, 0]}>
-        <boxGeometry args={[0.42, 0.26, 0.24]} />
+      <mesh position={[0, 0.98, 0]}>
+        <cylinderGeometry args={[0.14, 0.16, 0.22, 16]} />
         <meshStandardMaterial color="#00E5FF" roughness={0.3} metalness={0.8} transparent opacity={0.65} />
       </mesh>
       {/* Legs */}
-      <mesh position={[-0.18, -0.42, 0]}>
-        <cylinderGeometry args={[0.12, 0.09, 0.9, 16]} />
+      <mesh position={[-0.12, 0.45, 0]}>
+        <cylinderGeometry args={[0.07, 0.05, 0.85, 16]} />
         <meshStandardMaterial color="#00E5FF" roughness={0.3} metalness={0.8} transparent opacity={0.65} />
       </mesh>
-      <mesh position={[0.18, -0.42, 0]}>
-        <cylinderGeometry args={[0.12, 0.09, 0.9, 16]} />
+      <mesh position={[0.12, 0.45, 0]}>
+        <cylinderGeometry args={[0.07, 0.05, 0.85, 16]} />
         <meshStandardMaterial color="#00E5FF" roughness={0.3} metalness={0.8} transparent opacity={0.65} />
       </mesh>
 
@@ -254,6 +300,10 @@ export const DigitalTwinPage: React.FC<DigitalTwinPageProps> = ({
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
   const [simProgress, setSimProgress] = useState<number>(0);
   const [simResult, setSimResult] = useState<SimulationResult | null>(null);
+
+  // Viewport & Layer Controls (matched with 3D Body Map)
+  const [layerMode, setLayerMode] = useState<'all' | 'muscles' | 'skeleton'>('all');
+  const [xrayOpacity, setXrayOpacity] = useState<number>(0.85);
 
   const controlsRef = useRef<any>(null);
 
@@ -367,7 +417,7 @@ export const DigitalTwinPage: React.FC<DigitalTwinPageProps> = ({
         aiExplanation: `Based on your current Spine Elongation (+${spineDelta}cm) and unadapted paraspinal ligament laxity, executing a ${squatWeightKg}kg axial load will exceed the safe disc pressure threshold (3,400 N peak vs 4,820 N simulated). This is a deterministic safety violation.`,
         peakForceN: 4820,
         safetyLimitN: 3400,
-        stressCoords: [0, 0.48, -0.06],
+        stressCoords: [0, 1.05, -0.04],
         timestamp: new Date().toISOString(),
       });
     } else if (selectedActionId === 'eva-suit') {
@@ -384,7 +434,7 @@ export const DigitalTwinPage: React.FC<DigitalTwinPageProps> = ({
         aiExplanation: `Donning the Extravehicular Mobility Unit (EMU) against a ${evaPressurePsi} psi pressure differential creates excessive shear stress on the deltoid and rotator cuff. Bilateral crew assistance reduces peak joint torque by 42%.`,
         peakForceN: 1250,
         safetyLimitN: 1100,
-        stressCoords: [0, 0.88, 0.08],
+        stressCoords: [0.22, 1.44, 0.02],
         timestamp: new Date().toISOString(),
       });
     } else {
@@ -401,7 +451,7 @@ export const DigitalTwinPage: React.FC<DigitalTwinPageProps> = ({
         aiExplanation: `Microgravity cardiovascular deconditioning and cephalic fluid shift reduce left ventricular end-diastolic volume. High-intensity interval loading at ${treadmillSpeedKmh} km/h induces premature tachycardia and orthostatic stress.`,
         peakForceN: 2400,
         safetyLimitN: 2100,
-        stressCoords: [-0.08, 0.82, 0.14],
+        stressCoords: [-0.05, 1.32, 0.08],
         timestamp: new Date().toISOString(),
       });
     }
@@ -444,19 +494,91 @@ export const DigitalTwinPage: React.FC<DigitalTwinPageProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* LEFT HALF (6 COLS): 3D Anatomical Model Viewport (Requirement 1 & 3) */}
         <div className="lg:col-span-6 flex flex-col h-[700px] glass-panel glass-panel-glow rounded-2xl border border-[#00E5FF]/40 bg-[#060919]/95 shadow-[0_0_35px_rgba(0,229,255,0.18)] relative overflow-hidden">
-          {/* Viewport HUD Overlays */}
-          <div className="absolute top-4 left-4 z-10 flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-950/85 border border-[#00E5FF]/40 text-[#00E5FF] font-mono text-xs font-bold shadow-[0_0_15px_rgba(0,229,255,0.25)]">
-            <Layers className="w-4 h-4 text-[#00E5FF] animate-pulse" />
-            <span>3D ANATOMICAL RISK HOLOGRAPHY</span>
+          {/* Viewport Top HUD Strip */}
+          <div className="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-auto">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950/85 border border-[#00E5FF]/40 text-[#00E5FF] font-mono text-xs font-bold shadow-[0_0_15px_rgba(0,229,255,0.25)]">
+              <Layers className="w-4 h-4 text-[#00E5FF] animate-pulse" />
+              <span>3D TWIN ANATOMY // ÉCORCHÉ</span>
+            </div>
+
+            {/* Layer Filter Buttons */}
+            <div className="flex items-center gap-1 bg-[#091128] p-1 rounded-xl border border-slate-700/80">
+              <button
+                type="button"
+                onClick={() => setLayerMode('all')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                  layerMode === 'all'
+                    ? 'bg-[#00E5FF] text-black shadow-[0_0_12px_rgba(0,229,255,0.5)]'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                ALL
+              </button>
+              <button
+                type="button"
+                onClick={() => setLayerMode('muscles')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                  layerMode === 'muscles'
+                    ? 'bg-[#00E5FF] text-black shadow-[0_0_12px_rgba(0,229,255,0.5)]'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                MUSCLES
+              </button>
+              <button
+                type="button"
+                onClick={() => setLayerMode('skeleton')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                  layerMode === 'skeleton'
+                    ? 'bg-[#00E5FF] text-black shadow-[0_0_12px_rgba(0,229,255,0.5)]'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                SKELETON
+              </button>
+            </div>
           </div>
 
-          <div className="absolute top-4 right-4 z-10 text-[11px] font-mono text-slate-300 bg-slate-950/80 px-2.5 py-1 rounded border border-slate-800">
-            DRAG TO ROTATE · SCROLL TO ZOOM
+          {/* Bottom HUD: X-Ray Slider & Anatomical Color Legend */}
+          <div className="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-auto">
+            {/* X-Ray Slider */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/80 backdrop-blur-md border border-slate-800 text-xs font-mono text-slate-300">
+              <Sliders className="w-3.5 h-3.5 text-[#00E5FF]" />
+              <span className="text-[10px] text-slate-400 font-bold">X-RAY:</span>
+              <input
+                type="range"
+                min={0.15}
+                max={1.0}
+                step={0.05}
+                value={xrayOpacity}
+                onChange={(e) => setXrayOpacity(parseFloat(e.target.value))}
+                className="w-20 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#00E5FF]"
+                title="Adjust muscle translucency"
+              />
+            </div>
+
+            {/* Color Legend */}
+            <div className="flex items-center gap-3 px-3 py-1.5 rounded-xl bg-black/80 backdrop-blur-md border border-slate-800 text-[10px] font-mono text-slate-300 pointer-events-none">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#be123c] inline-block shadow-[0_0_6px_#be123c]" />
+                Muscle
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#e2d9c8] inline-block shadow-[0_0_6px_#e2d9c8]" />
+                Bone
+              </span>
+              {simResult && (
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444] inline-block animate-pulse shadow-[0_0_6px_#ef4444]" />
+                  Hotspot
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Active Stress Zone Banner */}
           {simResult && (
-            <div className="absolute bottom-4 left-4 right-4 z-10 p-3.5 rounded-xl bg-rose-950/90 border-2 border-rose-500 text-rose-100 font-mono text-xs flex items-center justify-between shadow-[0_0_25px_rgba(244,63,94,0.4)] animate-in slide-in-from-bottom-2">
+            <div className="absolute bottom-16 left-4 right-4 z-20 p-3.5 rounded-xl bg-rose-950/90 border-2 border-rose-500 text-rose-100 font-mono text-xs flex items-center justify-between shadow-[0_0_25px_rgba(244,63,94,0.4)] animate-in slide-in-from-bottom-2">
               <div className="flex items-center gap-2.5">
                 <Flame className="w-5 h-5 text-rose-400 animate-pulse shrink-0" />
                 <div>
@@ -475,15 +597,19 @@ export const DigitalTwinPage: React.FC<DigitalTwinPageProps> = ({
           )}
 
           {/* 3D Canvas with Real-time Reaction */}
-          <Canvas camera={{ position: [0, 0.4, 3.2], fov: 46 }}>
+          <Canvas camera={{ position: [0, 0.05, 3.6], fov: 34, near: 0.01, far: 50 }}>
             <ambientLight intensity={1.1} />
-            <directionalLight position={[4, 5, 4]} intensity={2.2} color="#00e5ff" />
-            <directionalLight position={[-4, 2, -3]} intensity={1.8} color="#c084fc" />
+            <directionalLight position={[3, 5, 4]} intensity={2.2} color="#f8fafc" />
+            <directionalLight position={[-3, 2, -3]} intensity={1.5} color="#00e5ff" />
             <pointLight position={[0, -2, 2]} intensity={1.2} color="#38bdf8" />
 
             <Suspense fallback={<ProceduralBodyFallback activeResult={simResult} />}>
               <ModelBoundary fallback={<ProceduralBodyFallback activeResult={simResult} />}>
-                <AnatomicalBodyModel activeResult={simResult} />
+                <AnatomicalBodyModel 
+                  activeResult={simResult} 
+                  layerMode={layerMode}
+                  xrayOpacity={xrayOpacity}
+                />
               </ModelBoundary>
             </Suspense>
 
@@ -491,8 +617,11 @@ export const DigitalTwinPage: React.FC<DigitalTwinPageProps> = ({
               ref={controlsRef}
               enableZoom={true}
               enablePan={true}
-              minDistance={1.8}
-              maxDistance={5.5}
+              enableDamping={true}
+              dampingFactor={0.08}
+              minDistance={0.5}
+              maxDistance={8.0}
+              target={[0, 0, 0]}
             />
           </Canvas>
         </div>

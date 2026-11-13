@@ -91,8 +91,6 @@ export const AstronautApp: React.FC<AstronautAppProps> = ({ user, onLogout }) =>
 
         {/* ── Top Nav (Astronaut) ── */}
         <TopNav
-          currentTab={currentTab}
-          onSelectTab={setCurrentTab}
           onOpenRoleModal={() => setShowLogoutMenu((v) => !v)}
         />
 
@@ -152,8 +150,6 @@ export const AstronautApp: React.FC<AstronautAppProps> = ({ user, onLogout }) =>
         {/* ── Content: Sidebar + Main ── */}
         <div className="flex-1 flex flex-row">
           <Sidebar
-            currentTab={currentTab}
-            onSelectTab={setCurrentTab}
             astronautName={profile.name}
             callsign={profile.callsign}
           />
